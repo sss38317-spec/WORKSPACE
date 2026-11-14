@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재료비계획 1단계 – 매출계획 가져오기</title>
+<style>
+:root{
+  --bg:#f5f7fa;--panel:#fff;--ink:#1d2433;--muted:#6b7385;--line:#dde2ea;--head:#1f3864;--head-ink:#fff;
+  --accent:#2f5bd3;--accent-soft:#e8eefc;--ok:#1e7b46;--ok-soft:#e3f4ea;--warn:#a15c00;--warn-soft:#fff3d9;
+  --err:#b3261e;--err-soft:#fde7e5;--guide:#2f5bd3;--guide-soft:#e8eefc;--direct:#5b4bb7;--direct-soft:#eeebfa;
+  --input:#fffbe6;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151b;--panel:#1b1f27;--ink:#e6e9ef;--muted:#9aa3b5;--line:#2c3340;--head:#2a3c66;--head-ink:#fff;
+  --accent:#7aa2ff;--accent-soft:#22304f;--ok:#6fd39b;--ok-soft:#173326;--warn:#ffc266;--warn-soft:#3a2d12;
+  --err:#ff8a80;--err-soft:#3d1a18;--guide:#7aa2ff;--guide-soft:#22304f;--direct:#b4a8ff;--direct-soft:#2c2650;--input:#2b2915;
+}}
+:root[data-theme="dark"]{
+  --bg:#12151b;--panel:#1b1f27;--ink:#e6e9ef;--muted:#9aa3b5;--line:#2c3340;--head:#2a3c66;--head-ink:#fff;
+  --accent:#7aa2ff;--accent-soft:#22304f;--ok:#6fd39b;--ok-soft:#173326;--warn:#ffc266;--warn-soft:#3a2d12;
+  --err:#ff8a80;--err-soft:#3d1a18;--guide:#7aa2ff;--guide-soft:#22304f;--direct:#b4a8ff;--direct-soft:#2c2650;--input:#2b2915;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif}
+header{background:var(--head);color:var(--head-ink);padding:14px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:700}
+header .sub{opacity:.8;font-size:12px}
+nav{display:flex;gap:4px;padding:10px 20px 0;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--panel)}
+nav button{border:0;background:none;padding:9px 14px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;font-weight:600}
+nav button.on{color:var(--accent);border-bottom-color:var(--accent)}
+nav .badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;font-size:11px;margin-left:4px;background:var(--err);color:#fff}
+main{padding:16px 20px 60px;max-width:1500px;margin:0 auto}
+section.tab{display:none}section.tab.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--ink)}
+.help{color:var(--muted);font-size:12px;margin:0 0 10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:6px;font:inherit;cursor:pointer}
+button.btn:hover{border-color:var(--accent)}
+button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{color:var(--err)}
+select,input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+textarea{width:100%;height:150px;font:12px/1.4 Consolas,monospace;color:var(--ink);background:var(--input);border:1px solid var(--line);border-radius:6px;padding:8px;white-space:pre;overflow:auto}
+.scroll{overflow:auto;max-width:100%}
+table{border-collapse:collapse;font-size:12px}
+th,td{border:1px solid var(--line);padding:4px 7px;white-space:nowrap}
+th{background:var(--accent-soft);font-weight:600;text-align:center;position:sticky;top:0;z-index:1}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;background:var(--ok-soft)}
+td.inp{background:var(--input);padding:0}
+td.inp input{width:84px;border:0;background:transparent;text-align:right;padding:5px 6px;color:var(--guide)}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;font-weight:600}
+.tag.G{background:var(--guide-soft);color:var(--guide)}
+.tag.D{background:var(--direct-soft);color:var(--direct)}
+.tag.E,.tag.X{background:var(--err-soft);color:var(--err)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi .l{color:var(--muted);font-size:12px}.kpi .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.msg{padding:8px 12px;border-radius:6px;margin:6px 0;font-size:12px}
+.msg.ok{background:var(--ok-soft);color:var(--ok)}.msg.warn{background:var(--warn-soft);color:var(--warn)}.msg.err{background:var(--err-soft);color:var(--err)}
+td.err{background:var(--err-soft)!important;color:var(--err)}
+.cond-list{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.cond-list button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:16px;padding:4px 12px;font:inherit;cursor:pointer}
+.cond-list button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.muted{color:var(--muted)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.on{opacity:.95}
+.legend span{margin-right:12px}
+@media (max-width:640px){main{padding:12px 16px 60px}header{padding:12px 16px}nav{padding:8px 16px 0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>재료비계획 · 1단계 매출계획 가져오기</h1>
+  <span class="sub">영업 매출계획(B~HO열)을 붙여넣으면 사업계획지침 조건에 따라 동량·동량지수·외화금액을 다시 계산합니다</span>
+</header>
+<nav id="nav">
+  <button data-t="cond" class="on">① 사업계획지침</button>
+  <button data-t="paste">② 매출계획 붙여넣기</button>
+  <button data-t="check">③ 검증 <span id="errBadge" class="badge" hidden>0</span></button>
+  <button data-t="result">④ 결과</button>
+  <button data-t="rule">계산 규칙</button>
+</nav>
+<main>
+
+<!-- ① 조건 -->
+<section class="tab on" id="t-cond">
+  <div class="card">
+    <h2>사업계획지침 조건</h2>
+    <p class="help">LME·동적용환율은 영업 양식에서 <b>"지침"</b>이라고 적힌 셀에만 적용됩니다(숫자로 입력된 셀은 고정). 동프리미엄·사업계획환율은 모든 행에 일괄 적용됩니다.
+    엑셀에서 12개월 값을 한 줄로 복사해 1월 칸에 붙여넣으면 12칸에 나눠 들어갑니다.</p>
+    <div class="cond-list" id="condList"></div>
+    <div class="row" style="margin-bottom:10px">
+      <label>조건명 <input type="text" id="condName" style="width:220px"></label>
+      <button class="btn" id="condCopy">조건 복사해서 추가</button>
+      <button class="btn danger" id="condDel">조건 삭제</button>
+    </div>
+    <div class="scroll">
+      <table id="condTable"></table>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label>동프리미엄 ($/톤, 연간) <input type="number" step="any" id="premium" style="width:100px"></label>
+    </div>
+    <h2 style="margin-top:14px">사업계획환율 (원/외화 1단위, 통화별 일괄)</h2>
+    <div class="row" id="planFxBox"></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="addCur">통화 추가</button><span class="muted">KRW 계약은 외화금액 0 · JPY는 원/1엔 (예: 9.2)</span></div>
+  </div>
+</section>
+
+<!-- ② 붙여넣기 -->
+<section class="tab" id="t-paste">
+  <div class="card">
+    <h2>영업 매출계획 붙여넣기</h2>
+    <p class="help">영업 매출계획 시트에서 <b>데이터 행 전체</b>(예: 15행~마지막 행, A열 또는 B열부터 HO열까지)를 복사(Ctrl+C)해서 아래 칸에 붙여넣기(Ctrl+V) 하세요. 제목·합계 행처럼 사업부나 상세제품군이 비어 있는 행은 자동으로 제외됩니다.</p>
+    <div class="row" style="margin-bottom:8px">
+      <label>매출버전 이름 <input type="text" id="verName" style="width:240px" placeholder="예: 27년 사업계획 Rev.1109"></label>
+      <label>복사 시작 열 <select id="startCol"><option value="auto">자동 감지</option><option value="A">A열</option><option value="B">B열</option></select></label>
+      <label>첫 데이터 행 번호 <input type="number" id="startRow" value="15" style="width:70px"></label>
+    </div>
+    <textarea id="pasteBox" placeholder="여기에 붙여넣기 (Ctrl+V)"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn pri" id="runBtn">불러오기 · 계산</button>
+      <button class="btn" id="clearBtn">지우기</button>
+      <button class="btn" id="sampleBtn">가상 예시 데이터 넣기</button>
+      <span id="pasteInfo" class="muted"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ③ 검증 -->
+<section class="tab" id="t-check">
+  <div class="card">
+    <h2>검증 결과 <span class="muted" id="checkCond"></span></h2>
+    <div id="checkSummary"></div>
+    <div class="scroll" style="max-height:420px"><table id="errTable"></table></div>
+  </div>
+  <div class="card">
+    <h2>지침과 같은 숫자가 입력된 셀</h2>
+    <p class="help">"지침" 대신 지침 값과 똑같은 숫자를 입력한 셀입니다. 그대로 두면 <b>직접입력(고정)</b>으로 처리되어 조건을 바꿔도 변하지 않습니다. 지침으로 바꾸려면 체크 후 변환하세요.</p>
+    <div class="row" style="margin-bottom:8px"><button class="btn" id="eqAll">전체 선택</button><button class="btn pri" id="eqConvert">선택 셀을 "지침"으로 변환</button></div>
+    <div class="scroll" style="max-height:360px"><table id="eqTable"></table></div>
+  </div>
+</section>
+
+<!-- ④ 결과 -->
+<section class="tab" id="t-result">
+  <div class="row" style="margin-bottom:12px">
+    <label>적용 조건 <select id="resCond"></select></label>
+    <span class="muted" id="resVer"></span>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card">
+    <h2>내보내기</h2>
+    <p class="help">"전체 행 복사"는 영업 양식과 같은 열 배치(복사 시작 열과 동일)로 계산값을 채웁니다. 원본 시트 같은 위치에 붙여넣으면 됩니다. 구분 열(LME·동적용환율 지침/직접 × 12개월)은 별도로 복사해 양식 맨 끝에 붙여넣으세요.</p>
+    <div class="row">
+      <button class="btn pri" id="cpFull">전체 행 복사 (양식 열 배치)</button>
+      <button class="btn" id="cpFlag">구분 열 복사 (24열)</button>
+      <button class="btn" id="cpLong">2단계용 월별 목록 복사</button>
+      <button class="btn" id="dlCsv">CSV 다운로드 (전체+구분)</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>상세제품군별 요약 (연간)</h2>
+    <div class="scroll"><table id="sumTable"></table></div>
+  </div>
+  <div class="card">
+    <h2>행별 상세</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label>월 <select id="detMonth"></select></label>
+      <label>상세제품군 <select id="detProd"><option value="">전체</option></select></label>
+      <span class="legend muted"><span class="tag G">지침</span>조건 연동 <span class="tag D">직접</span>고정 <span class="tag E">누락</span>입력 필요</span>
+    </div>
+    <div class="scroll" style="max-height:520px"><table id="detTable"></table></div>
+  </div>
+</section>
+
+<!-- 규칙 -->
+<section class="tab" id="t-rule">
+  <div class="card">
+    <h2>1단계 계산 규칙 (월별, 행별)</h2>
+    <div class="scroll"><table>
+      <tr><th>열(1월)</th><th>항목</th><th>산식 / 출처</th></tr>
+      <tr><td>U · V</td><td>세선·태선 비중</td><td>영업 입력값, 비어 있으면 B블록 N·P열</td></tr>
+      <tr><td>W</td><td>매출액 (백만원)</td><td>영업 입력 (조건과 무관하게 고정)</td></tr>
+      <tr><td>AA</td><td>LME ($/톤)</td><td>"지침" → 조건의 월별 LME · 숫자 → 그 값 고정</td></tr>
+      <tr><td>AB</td><td>동프리미엄</td><td>조건의 연간 프리미엄 (일괄)</td></tr>
+      <tr><td>AC</td><td>LME+동프리미엄</td><td>AA + AB</td></tr>
+      <tr><td>AD</td><td>동적용환율</td><td>"지침" → 조건의 월별 환율 · 숫자 → 고정</td></tr>
+      <tr><td>AE</td><td>사업계획환율</td><td>조건의 계약통화별 환율 (일괄), KRW는 공란</td></tr>
+      <tr><td>X</td><td>추가인상 (백만원/톤)</td><td>ROUNDDOWN((AA − 수주LME R) × AD ÷ 1,000,000, 2), LME 없으면 0</td></tr>
+      <tr><td>T</td><td>동량지수</td><td>U × O + V × Q + X</td></tr>
+      <tr><td>S</td><td>동량 (톤)</td><td>W ÷ T</td></tr>
+      <tr><td>Z</td><td>적용동가 (원/kg)</td><td>AC × AD ÷ 1,000</td></tr>
+      <tr><td>Y</td><td>동재료비 (영업 참고용)</td><td>S × Z ÷ 1,000</td></tr>
+      <tr><td>AF</td><td>외화금액</td><td>KRW → 0, 그 외 W ÷ AE</td></tr>
+      <tr><td>AH</td><td>수주이익금</td><td>W × AG(수주이익률)</td></tr>
+      <tr><td>HC~HO</td><td>연간</td><td>동량·매출·동재료비·외화금액·이익금 = 합계 / 동량지수 = Σ매출÷Σ동량 / 적용동가 = Σ동재료비×1000÷Σ동량 / LME·프리미엄·LME+프리미엄·동적용환율 = 동량 가중평균 / 사업계획환율 = 매출 가중평균 / 이익률 = Σ이익금÷Σ매출</td></tr>
+    </table></div>
+    <p class="help" style="margin-top:10px">검증 오류: 매출액이 있는 월에 LME·동적용환율이 빈칸이거나 숫자/"지침" 외의 값, 동량지수 0 이하, 수주LME 없음, 사업계획환율 미설정 통화, JPY 환율 50 초과(원/100엔 입력 의심).</p>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ---------------- 상수: 영업 양식 열 위치 (1 = A열) ---------------- */
+const COL = {사업부:2,부서:3,제품군:4,상세제품군:5,거래처:6,BACKLOG:7,프로젝트:8,선종:9,수수료율:10,운송비율:11,연동:12,통화:13,
+  세선비중:14,세선지수:15,태선비중:16,태선지수:17,수주LME:18};
+const M0 = 19, MW = 16, Y0 = M0 + 12*MW, LASTCOL = Y0 + 12; // S=19, 연간 HC=211 ~ HO=223
+const OFF = {동량:0,지수:1,세선:2,태선:3,매출:4,추가:5,동재료비:6,적용동가:7,LME:8,프리미엄:9,LP:10,동환율:11,계획환율:12,외화:13,이익률:14,이익금:15};
+const MONTHS = Array.from({length:12},(_,i)=>(i+1)+"월");
+const LS_KEY = "mc_step1_v1";
+
+/* ---------------- 상태 ---------------- */
+let state = {
+  conds:[defaultCond("사업계획지침(기본)")], cur:0,
+  verName:"", paste:"", startCol:"auto", startRow:15,
+  overrides:{} // "rowIdx|m|LME" -> "지침"
+};
+let parsed = null;   // {rows:[...], skipped, offset}
+let results = null;  // per condition index cache
+
+function defaultCond(name){
+  return {name, lme:[13900,13950,14000,14050,14100,14150,14200,14250,14300,14350,14400,14450],
+    fx:Array(12).fill(1400), premium:450, planFx:{USD:1400, JPY:9.2}};
+}
+function save(){try{localStorage.setItem(LS_KEY, JSON.stringify(state));}catch(e){}}
+function load(){try{const s=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(s&&s.conds&&s.conds.length) state=Object.assign(state,s);}catch(e){}}
+
+/* ---------------- 유틸 ---------------- */
+const $ = id => document.getElementById(id);
+function colName(n){let s="";while(n>0){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26);}return s;}
+function parseNum(s){
+  if(s==null) return null; s=String(s).trim(); if(s==="") return null;
+  if(s==="-") return 0;
+  let neg=false; if(/^\(.*\)$/.test(s)){neg=true;s=s.slice(1,-1);}
+  let pct=false; if(s.endsWith("%")){pct=true;s=s.slice(0,-1);}
+  s=s.replace(/[,\s₩$]/g,"");
+  if(s===""||isNaN(Number(s))) return NaN;
+  let v=Number(s); if(pct) v/=100; return neg?-v:v;
+}
+function parseFlag(s){
+  const t=(s==null?"":String(s)).trim();
+  if(t==="") return {t:"E"};
+  if(t==="지침"||t==="사업계획지침") return {t:"G"};
+  const v=parseNum(t); if(v==null||isNaN(v)) return {t:"X",raw:t};
+  return {t:"D",v};
+}
+function rounddown2(x){const s=x<0?-1:1;return s*Math.floor(Math.abs(x)*100+1e-9)/100;}
+function fmt(v,d=0){if(v==null||v===""||isNaN(v))return "";if(Math.abs(v)<1e-12)return "-";return v.toLocaleString("ko-KR",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function clean(v){return (typeof v==="number")?(isFinite(v)?Math.round(v*1e6)/1e6:""):(v==null?"":v);}
+function tsvCell(v){v=String(clean(v));return /[\t\n"]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");setTimeout(()=>e.classList.remove("on"),1800);}
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);}catch(e){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();}
+  toast("복사했습니다. 엑셀에 붙여넣으세요");
+}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------------- TSV 파서 (엑셀 따옴표 셀 지원) ---------------- */
+function parseTSV(text){
+  const rows=[];let row=[],cell="",q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else if(c==='"'&&cell==="") q=true;
+    else if(c==="\t"){row.push(cell);cell="";}
+    else if(c==="\n"){row.push(cell);rows.push(row);row=[];cell="";}
+    else if(c!=="\r") cell+=c;
+  }
+  if(cell!==""||row.length){row.push(cell);rows.push(row);}
+  return rows;
+}
+const BIZ = ["선박선","광통신"];
+function parsePaste(){
+  const raw=parseTSV(state.paste);
+  if(!raw.length) return null;
+  let off; // 붙여넣은 첫 열의 엑셀 열번호
+  if(state.startCol==="A") off=1; else if(state.startCol==="B") off=2;
+  else{ let a=0,b=0; raw.forEach(r=>{ if(BIZ.includes((r[1]||"").trim())) a++; if(BIZ.includes((r[0]||"").trim())) b++; }); off = a>=b && a>0 ? 1 : (b>0?2:1); }
+  const rows=[];let skipped=0;
+  raw.forEach((r,i)=>{
+    const cells=[]; // index = 엑셀 열번호
+    for(let c=1;c<=LASTCOL;c++) cells[c] = r[c-off]!==undefined ? r[c-off] : "";
+    if(String(cells[COL.사업부]).trim()===""||String(cells[COL.상세제품군]).trim()===""){ if(r.some(x=>String(x).trim()!=="")) skipped++; return; }
+    rows.push({cells, excelRow: Number(state.startRow)+i, src:i});
+  });
+  return {rows, skipped, off, total:raw.length};
+}
+
+/* ---------------- 계산 ---------------- */
+function getFlag(row, m, key){
+  const ok = state.overrides[row.src+"|"+m+"|"+key];
+  if(ok) return {t:"G", conv:true};
+  return parseFlag(row.cells[M0+m*MW+OFF[key]]);
+}
+function calc(cond){
+  const out=[];
+  for(const row of parsed.rows){
+    const c=row.cells, n=k=>parseNum(c[COL[k]]);
+    const O=n("세선지수")||0, Q=n("태선지수")||0, R=n("수주LME"), cur=(String(c[COL.통화]).trim().toUpperCase()||"KRW");
+    const baseTw=n("세선비중")||0, baseTh=n("태선비중")||0;
+    const planFx = cur==="KRW" ? null : (cond.planFx[cur]!=null && cond.planFx[cur]!=="" ? Number(cond.planFx[cur]) : null);
+    const mon=[], errs=[], flags={LME:[],FX:[]};
+    for(let m=0;m<12;m++){
+      const b=M0+m*MW;
+      const sales = parseNum(c[b+OFF.매출]); const S = (sales==null||isNaN(sales))?0:sales;
+      if(sales!=null && isNaN(sales)) errs.push({m,item:"매출액",msg:"숫자가 아님: "+c[b+OFF.매출]});
+      let tw=parseNum(c[b+OFF.세선]); if(tw==null||isNaN(tw)) tw=baseTw;
+      let th=parseNum(c[b+OFF.태선]); if(th==null||isNaN(th)) th=baseTh;
+      const fL=getFlag(row,m,"LME"), fF=getFlag(row,m,"동환율");
+      flags.LME[m]=fL.t; flags.FX[m]=fF.t;
+      const gl = cond.lme[m]===""||cond.lme[m]==null?null:Number(cond.lme[m]);
+      const gf = cond.fx[m]===""||cond.fx[m]==null?null:Number(cond.fx[m]);
+      const lme = fL.t==="G"?gl:(fL.t==="D"?fL.v:null);
+      const fx  = fF.t==="G"?gf:(fF.t==="D"?fF.v:null);
+      if(S!==0){
+        if(fL.t==="E") errs.push({m,item:"LME",msg:"빈칸 (숫자 또는 \"지침\" 입력 필요)"});
+        if(fL.t==="X") errs.push({m,item:"LME",msg:"인식 불가 값: "+fL.raw});
+        if(fF.t==="E") errs.push({m,item:"동적용환율",msg:"빈칸 (숫자 또는 \"지침\" 입력 필요)"});
+        if(fF.t==="X") errs.push({m,item:"동적용환율",msg:"인식 불가 값: "+fF.raw});
+        if(fL.t==="G"&&gl==null) errs.push({m,item:"LME",msg:"조건에 "+(m+1)+"월 지침 LME가 없음"});
+        if(fF.t==="G"&&gf==null) errs.push({m,item:"동적용환율",msg:"조건에 "+(m+1)+"월 지침 환율이 없음"});
+        if(lme!=null&&(R==null||isNaN(R))) errs.push({m,item:"수주LME",msg:"B블록 수주LME(R열) 없음 → 추가인상이 과대 계산됨"});
+      }
+      const add = lme==null ? 0 : rounddown2((lme-((R==null||isNaN(R))?0:R))*(fx||0)/1e6);
+      const idx = tw*O + th*Q + add;
+      const qty = idx>0 ? S/idx : 0;
+      if(S!==0 && !(idx>0)) errs.push({m,item:"동량지수",msg:"0 이하 ("+fmt(idx,2)+") → 동량 계산 불가 (B블록 지수·비중 확인)"});
+      const prem = Number(cond.premium)||0;
+      const lp = lme==null?null:lme+prem;
+      const price = (lp!=null&&fx!=null)? lp*fx/1000 : 0;
+      const cu = qty*price/1000;
+      const fxAmt = cur==="KRW"?0:(planFx?S/planFx:0);
+      if(S!==0 && cur!=="KRW" && !planFx) errs.push({m,item:"사업계획환율",msg:cur+" 환율이 조건에 없음"});
+      let rate=parseNum(c[b+OFF.이익률]); if(rate==null||isNaN(rate)) rate=0;
+      mon.push({S,tw,th,lme,fx,prem,lp,add,idx,qty,price,cu,planFx:cur==="KRW"?null:planFx,fxAmt,rate,profit:S*rate,fL:fL.t,fF:fF.t,conv:!!(fL.conv||fF.conv)});
+    }
+    if(cur==="JPY" && planFx>50) errs.push({m:null,item:"사업계획환율",msg:"JPY "+planFx+" → 원/100엔으로 입력된 것 같음 (원/1엔 사용)"});
+    // 연간
+    const sum=f=>mon.reduce((a,x)=>a+(f(x)||0),0);
+    const Q_=sum(x=>x.qty), S_=sum(x=>x.S), CU=sum(x=>x.cu);
+    const wq=f=>Q_?sum(x=>x.qty*(f(x)||0))/Q_:null;
+    const yr={qty:Q_,idx:Q_?S_/Q_:null,S:S_,cu:CU,price:Q_?CU*1000/Q_:null,lme:wq(x=>x.lme),prem:wq(x=>x.lme==null?null:x.prem),lp:wq(x=>x.lp),fx:wq(x=>x.fx),
+      planFx:S_&&cur!=="KRW"?sum(x=>x.S*(x.planFx||0))/S_:null,fxAmt:sum(x=>x.fxAmt),profit:sum(x=>x.profit)};
+    yr.rate=S_?yr.profit/S_:null;
+    out.push({row,cur,mon,yr,errs,flags});
+  }
+  return out;
+}
+function equalToGuide(cond){
+  const list=[];
+  parsed.rows.forEach(row=>{
+    for(let m=0;m<12;m++){
+      for(const [key,arr,label] of [["LME",cond.lme,"LME"],["동환율",cond.fx,"동적용환율"]]){
+        if(state.overrides[row.src+"|"+m+"|"+key]) continue;
+        const f=parseFlag(row.cells[M0+m*MW+OFF[key]]);
+        if(f.t==="D" && arr[m]!=="" && arr[m]!=null && Math.abs(f.v-Number(arr[m]))<1e-9) list.push({row,m,key,label,v:f.v});
+      }
+    }
+  });
+  return list;
+}
+
+/* ---------------- 조건 UI ---------------- */
+function renderConds(){
+  const cl=$("condList"); cl.innerHTML="";
+  state.conds.forEach((c,i)=>{const b=document.createElement("button");b.textContent=c.name;if(i===state.cur)b.className="on";b.onclick=()=>{state.cur=i;renderConds();refresh();};cl.appendChild(b);});
+  const c=state.conds[state.cur];
+  $("condName").value=c.name; $("premium").value=c.premium;
+  let h="<tr><th>항목</th>"+MONTHS.map(m=>"<th>"+m+"</th>").join("")+"<th>평균</th></tr>";
+  for(const [k,label] of [["lme","지침 LME ($/톤)"],["fx","지침 동적용환율 (원/$)"]]){
+    h+="<tr><td><b>"+label+"</b></td>"+c[k].map((v,m)=>'<td class="inp"><input data-k="'+k+'" data-m="'+m+'" value="'+(v??"")+'"></td>').join("")+
+      '<td class="n" id="avg-'+k+'">'+fmt(avg(c[k]),k==="lme"?1:2)+"</td></tr>";
+  }
+  h+='<tr><td><b>지침 적용동가 (원/kg)</b></td>'+c.lme.map((v,m)=>'<td class="n" id="cp-'+m+'">'+fmt(cuPrice(c,m),0)+"</td>").join("")+'<td class="n"></td></tr>';
+  $("condTable").innerHTML=h;
+  $("condTable").querySelectorAll("input").forEach(inp=>{
+    inp.onchange=()=>{c[inp.dataset.k][+inp.dataset.m]=inp.value===""?"":parseNum(inp.value);updateCondCalc();refresh();};
+    inp.onpaste=e=>{const t=(e.clipboardData||window.clipboardData).getData("text");const vals=t.trim().split(/[\t\n]/);if(vals.length<2)return;e.preventDefault();
+      let m=+inp.dataset.m;vals.forEach(v=>{if(m<12){c[inp.dataset.k][m]=parseNum(v);m++;}});renderConds();refresh();};
+  });
+  const pb=$("planFxBox");pb.innerHTML="";
+  Object.keys(c.planFx).forEach(cur=>{const l=document.createElement("label");l.innerHTML=cur+' <input type="number" step="any" style="width:90px" value="'+c.planFx[cur]+'"> <button class="btn danger" title="삭제">×</button>';
+    l.querySelector("input").onchange=e=>{c.planFx[cur]=e.target.value===""?"":Number(e.target.value);save();refresh();};
+    l.querySelector("button").onclick=()=>{delete c.planFx[cur];renderConds();refresh();};
+    pb.appendChild(l);});
+  $("condDel").disabled=state.conds.length<2;
+  save();
+}
+function avg(a){const v=a.filter(x=>x!==""&&x!=null).map(Number);return v.length?v.reduce((s,x)=>s+x,0)/v.length:null;}
+function cuPrice(c,m){if(c.lme[m]===""||c.fx[m]===""||c.lme[m]==null||c.fx[m]==null)return null;return (Number(c.lme[m])+Number(c.premium||0))*Number(c.fx[m])/1000;}
+function updateCondCalc(){const c=state.conds[state.cur];for(let m=0;m<12;m++){$("cp-"+m).textContent=fmt(cuPrice(c,m),0);}$("avg-lme").textContent=fmt(avg(c.lme),1);$("avg-fx").textContent=fmt(avg(c.fx),2);save();}
+$("condName").onchange=e=>{state.conds[state.cur].name=e.target.value||"조건";renderConds();refresh();};
+$("premium").onchange=e=>{state.conds[state.cur].premium=Number(e.target.value)||0;updateCondCalc();refresh();};
+$("condCopy").onclick=()=>{const c=JSON.parse(JSON.stringify(state.conds[state.cur]));c.name=c.name+" 복사";state.conds.push(c);state.cur=state.conds.length-1;renderConds();refresh();};
+$("condDel").onclick=()=>{if(state.conds.length<2)return;if(!confirm("'"+state.conds[state.cur].name+"' 조건을 삭제할까요?"))return;state.conds.splice(state.cur,1);state.cur=0;renderConds();refresh();};
+$("addCur").onclick=()=>{const cur=(prompt("통화 코드 (예: EUR)")||"").trim().toUpperCase();if(!cur||cur==="KRW")return;state.conds[state.cur].planFx[cur]="";renderConds();};
+
+/* ---------------- 붙여넣기 UI ---------------- */
+$("pasteBox").addEventListener("input",()=>{$("pasteInfo").textContent=($("pasteBox").value.split("\n").length)+"줄 입력됨 → '불러오기 · 계산'을 누르세요";});
+$("runBtn").onclick=()=>{state.paste=$("pasteBox").value;state.verName=$("verName").value;state.startCol=$("startCol").value;state.startRow=Number($("startRow").value)||15;state.overrides={};run(true);};
+$("clearBtn").onclick=()=>{if(!confirm("붙여넣은 데이터를 지울까요?"))return;$("pasteBox").value="";state.paste="";state.overrides={};parsed=null;save();refresh();};
+$("sampleBtn").onclick=()=>{$("pasteBox").value=sampleTSV();$("verName").value="가상 예시 (검증용)";$("startCol").value="A";$("startRow").value=15;$("runBtn").click();};
+
+function run(goCheck){
+  parsed=state.paste?parsePaste():null; save();
+  if(parsed){ $("pasteInfo").textContent=`데이터 ${parsed.rows.length}행 인식 · 제외 ${parsed.skipped}행 · 시작열 ${colName(parsed.off)}열`; }
+  refresh(); if(goCheck&&parsed) showTab(results&&results.errCount?"check":"result");
+}
+
+/* ---------------- 결과 렌더 ---------------- */
+function refresh(){
+  const sel=$("resCond"); const prev=sel.value;
+  sel.innerHTML=state.conds.map((c,i)=>`<option value="${i}">${esc(c.name)}</option>`).join("");
+  sel.value = prev!==""&&prev<state.conds.length ? prev : state.cur;
+  if(!parsed){results=null;["kpis","sumTable","detTable","errTable","eqTable"].forEach(id=>$(id).innerHTML="");$("checkSummary").innerHTML='<div class="msg warn">아직 매출계획을 불러오지 않았습니다.</div>';$("errBadge").hidden=true;$("resVer").textContent="";return;}
+  const ci=+sel.value, cond=state.conds[ci];
+  const res=calc(cond); const errs=res.flatMap(r=>r.errs.map(e=>({...e,r})));
+  results={ci,res,errCount:errs.length};
+  $("resVer").textContent="매출버전: "+(state.verName||"(이름 없음)");
+  $("errBadge").hidden=!errs.length; $("errBadge").textContent=errs.length;
+  renderCheck(cond,res,errs); renderKpis(res); renderSummary(res); renderDetail(res);
+}
+function renderCheck(cond,res,errs){
+  $("checkCond").textContent="· 조건: "+cond.name;
+  const nG=res.reduce((a,r)=>a+r.mon.filter((x,m)=>x.S&&x.fL==="G").length,0), nD=res.reduce((a,r)=>a+r.mon.filter(x=>x.S&&x.fL==="D").length,0);
+  const conv=Object.keys(state.overrides).length;
+  $("checkSummary").innerHTML=
+    `<div class="msg ${errs.length?"err":"ok"}">${errs.length?`오류 ${errs.length}건 – 아래 셀은 계산값이 0 또는 부정확합니다. 영업 양식 수정 후 다시 붙여넣으세요.`:"오류 없음 – 모든 매출 월에 LME·동적용환율이 입력되어 있습니다."}</div>`+
+    `<div class="msg ok">인식 ${parsed.rows.length}행 (제외 ${parsed.skipped}행) · 매출이 있는 월 기준 LME 지침 ${nG}칸 / 직접 ${nD}칸${conv?` · 지침으로 변환한 셀 ${conv}칸`:""}</div>`;
+  $("errTable").innerHTML=errs.length?"<tr><th>엑셀 행</th><th>상세제품군</th><th>거래처</th><th>프로젝트</th><th>월</th><th>항목</th><th>셀</th><th>내용</th></tr>"+
+    errs.map(e=>{const c=e.r.row.cells;const colIdx=e.m==null?null:M0+e.m*MW+({LME:OFF.LME,"동적용환율":OFF.동환율,"매출액":OFF.매출}[e.item]??OFF.매출);
+      return `<tr><td class="n">${e.r.row.excelRow}</td><td>${esc(c[COL.상세제품군])}</td><td>${esc(c[COL.거래처])}</td><td>${esc(c[COL.프로젝트])}</td><td>${e.m==null?"연간":(e.m+1)+"월"}</td><td>${e.item}</td><td>${colIdx&&["LME","동적용환율","매출액"].includes(e.item)?colName(colIdx)+e.r.row.excelRow:""}</td><td class="err">${esc(e.msg)}</td></tr>`;}).join(""):"";
+  const eq=equalToGuide(cond);
+  $("eqTable").innerHTML=eq.length?"<tr><th></th><th>엑셀 행</th><th>상세제품군</th><th>거래처</th><th>월</th><th>항목</th><th>셀</th><th>입력값</th></tr>"+
+    eq.map((e,i)=>`<tr><td><input type="checkbox" data-i="${i}"></td><td class="n">${e.row.excelRow}</td><td>${esc(e.row.cells[COL.상세제품군])}</td><td>${esc(e.row.cells[COL.거래처])}</td><td>${e.m+1}월</td><td>${e.label}</td><td>${colName(M0+e.m*MW+OFF[e.key])}${e.row.excelRow}</td><td class="n">${fmt(e.v,2)}</td></tr>`).join(""):
+    '<tr><td class="muted" style="border:0">해당 셀 없음</td></tr>';
+  $("eqAll").onclick=()=>$("eqTable").querySelectorAll("input").forEach(x=>x.checked=true);
+  $("eqConvert").onclick=()=>{let n=0;$("eqTable").querySelectorAll("input:checked").forEach(x=>{const e=eq[+x.dataset.i];state.overrides[e.row.src+"|"+e.m+"|"+e.key]="지침";n++;});save();refresh();toast(n+"칸을 지침으로 변환했습니다 (내보내기에 반영)");};
+}
+function renderKpis(res){
+  const t=k=>res.reduce((a,r)=>a+(r.yr[k]||0),0);
+  const S=t("S"),Q=t("qty"),CU=t("cu");
+  const byCur={};res.forEach(r=>{if(r.cur!=="KRW")byCur[r.cur]=(byCur[r.cur]||0)+r.yr.fxAmt;});
+  $("kpis").innerHTML=[["행 수",fmt(res.length)],["연간 매출액 (백만원)",fmt(S)],["연간 동량 (톤)",fmt(Q,1)],["평균 동량지수",fmt(Q?S/Q:null,2)],["동재료비 · 영업참고 (백만원)",fmt(CU)],
+    ...Object.entries(byCur).map(([c,v])=>["외화금액 "+c+" (백만)",fmt(v,1)])].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+}
+function renderSummary(res){
+  const g={};res.forEach(r=>{const k=String(r.row.cells[COL.상세제품군]).trim()||"(미기재)";const x=g[k]||(g[k]={S:0,qty:0,cu:0,addq:0,prof:0,rows:0,biz:r.row.cells[COL.제품군]});
+    x.S+=r.yr.S;x.qty+=r.yr.qty;x.cu+=r.yr.cu;x.prof+=r.yr.profit;x.rows++;r.mon.forEach(m=>x.addq+=m.add*m.qty);});
+  const keys=Object.keys(g);const tot={S:0,qty:0,cu:0,addq:0,prof:0,rows:0};keys.forEach(k=>{for(const f in tot)tot[f]+=g[k][f];});
+  const line=(k,x,cls="")=>`<tr class="${cls}"><td>${esc(k)}</td><td>${esc(x.biz||"")}</td><td class="n">${x.rows}</td><td class="n">${fmt(x.S)}</td><td class="n">${fmt(x.qty,1)}</td><td class="n">${fmt(x.qty?x.S/x.qty:null,2)}</td><td class="n">${fmt(x.qty?x.addq/x.qty:null,2)}</td><td class="n">${fmt(x.cu)}</td><td class="n">${fmt(x.prof)}</td></tr>`;
+  $("sumTable").innerHTML="<tr><th>상세제품군</th><th>제품군</th><th>행수</th><th>매출액</th><th>동량(톤)</th><th>동량지수</th><th>추가인상(동량가중)</th><th>동재료비·참고</th><th>수주이익금</th></tr>"+
+    keys.map(k=>line(k,g[k])).join("")+line("합계",tot,"tot");
+  const dp=$("detProd"),pv=dp.value;dp.innerHTML='<option value="">전체</option>'+keys.map(k=>`<option>${esc(k)}</option>`).join("");dp.value=keys.includes(pv)?pv:"";
+}
+function renderDetail(res){
+  const ds=$("detMonth"); if(!ds.options.length){ds.innerHTML=MONTHS.map((m,i)=>`<option value="${i}">${m}</option>`).join("")+'<option value="Y">연간</option>';}
+  const mv=ds.value, pf=$("detProd").value;
+  const list=res.filter(r=>!pf||String(r.row.cells[COL.상세제품군]).trim()===pf);
+  const tag=(t,S)=>(t==="E"&&!S)?"":`<span class="tag ${t}">${{G:"지침",D:"직접",E:"누락",X:"오류"}[t]}</span>`;
+  let h;
+  if(mv==="Y"){
+    h="<tr><th>행</th><th>상세제품군</th><th>거래처</th><th>프로젝트</th><th>통화</th><th>매출액</th><th>LME(가중)</th><th>동적용환율(가중)</th><th>동량지수</th><th>동량</th><th>적용동가</th><th>외화금액</th><th>지침/직접 월수</th></tr>"+
+      list.map(r=>{const y=r.yr,c=r.row.cells;const nG=r.flags.LME.filter(t=>t==="G").length;return `<tr><td class="n">${r.row.excelRow}</td><td>${esc(c[COL.상세제품군])}</td><td>${esc(c[COL.거래처])}</td><td>${esc(c[COL.프로젝트])}</td><td>${r.cur}</td><td class="n">${fmt(y.S)}</td><td class="n">${fmt(y.lme,1)}</td><td class="n">${fmt(y.fx,2)}</td><td class="n">${fmt(y.idx,2)}</td><td class="n">${fmt(y.qty,2)}</td><td class="n">${fmt(y.price,0)}</td><td class="n">${fmt(y.fxAmt,2)}</td><td>LME 지침 ${nG} / 직접 ${12-nG}</td></tr>`;}).join("");
+  }else{
+    const m=+mv;
+    h="<tr><th>행</th><th>상세제품군</th><th>거래처</th><th>프로젝트</th><th>통화</th><th>세선</th><th>태선</th><th>매출액</th><th>LME</th><th>동적용환율</th><th>추가인상</th><th>동량지수</th><th>동량(톤)</th><th>적용동가</th><th>사업계획환율</th><th>외화금액</th></tr>"+
+      list.map(r=>{const x=r.mon[m],c=r.row.cells;const bad=x.S&&(x.fL==="E"||x.fL==="X"),badF=x.S&&(x.fF==="E"||x.fF==="X");
+        return `<tr><td class="n">${r.row.excelRow}</td><td>${esc(c[COL.상세제품군])}</td><td>${esc(c[COL.거래처])}</td><td>${esc(c[COL.프로젝트])}</td><td>${r.cur}</td><td class="n">${x.tw?fmt(x.tw*100,0)+"%":"-"}</td><td class="n">${x.th?fmt(x.th*100,0)+"%":"-"}</td><td class="n">${fmt(x.S)}</td>
+        <td class="n ${bad?"err":""}">${tag(x.fL,x.S)} ${fmt(x.lme,1)}</td><td class="n ${badF?"err":""}">${tag(x.fF,x.S)} ${fmt(x.fx,2)}</td><td class="n">${fmt(x.add,2)}</td><td class="n">${fmt(x.idx,2)}</td><td class="n">${fmt(x.qty,2)}</td><td class="n">${fmt(x.price,0)}</td><td class="n">${fmt(x.planFx,2)}</td><td class="n">${fmt(x.fxAmt,2)}</td></tr>`;}).join("");
+  }
+  $("detTable").innerHTML=h;
+}
+$("detMonth").onchange=()=>results&&renderDetail(results.res);
+$("detProd").onchange=()=>results&&renderDetail(results.res);
+$("resCond").onchange=()=>refresh();
+
+/* ---------------- 내보내기 ---------------- */
+function fullRow(r){
+  const c=r.row.cells, o=[];
+  for(let k=1;k<M0;k++) o[k]=c[k];
+  r.mon.forEach((x,m)=>{const b=M0+m*MW;
+    o[b+OFF.동량]=x.qty;o[b+OFF.지수]=x.idx;o[b+OFF.세선]=x.tw;o[b+OFF.태선]=x.th;o[b+OFF.매출]=x.S;o[b+OFF.추가]=x.add;o[b+OFF.동재료비]=x.cu;o[b+OFF.적용동가]=x.price;
+    o[b+OFF.LME]=x.lme??"";o[b+OFF.프리미엄]=x.lme==null?"":x.prem;o[b+OFF.LP]=x.lp??"";o[b+OFF.동환율]=x.fx??"";o[b+OFF.계획환율]=x.planFx??"";o[b+OFF.외화]=x.fxAmt;o[b+OFF.이익률]=x.rate;o[b+OFF.이익금]=x.profit;});
+  const y=r.yr;[y.qty,y.idx,y.S,y.cu,y.price,y.lme,y.prem,y.lp,y.fx,y.planFx,y.fxAmt,y.rate,y.profit].forEach((v,i)=>o[Y0+i]=v??"");
+  return o.slice(parsed.off);
+}
+function flagRow(r){const L={G:"지침",D:"직접",E:"누락",X:"오류"};const f=(t,m)=>(t==="E"&&!r.mon[m].S)?"":L[t];return [...r.flags.LME.map(f),...r.flags.FX.map(f)];}
+function flagHead(){return [...MONTHS.map(m=>"LME구분_"+m),...MONTHS.map(m=>"동적용환율구분_"+m)];}
+function need(){if(!results){toast("먼저 매출계획을 불러오세요");return false;}return true;}
+$("cpFull").onclick=()=>{if(!need())return;copyText(results.res.map(r=>fullRow(r).map(tsvCell).join("\t")).join("\n"));};
+$("cpFlag").onclick=()=>{if(!need())return;copyText([flagHead().join("\t"),...results.res.map(r=>flagRow(r).join("\t"))].join("\n"));};
+$("cpLong").onclick=()=>{if(!need())return;
+  const head=["매출버전","조건","엑셀행","사업부","부서","제품군","상세제품군","거래처","BACKLOG구분","프로젝트명","계약통화","월","세선비중","태선비중","매출액","LME","LME구분","동적용환율","환율구분","추가인상","동량지수","동량","외화금액"];
+  const cond=state.conds[results.ci].name, L={G:"지침",D:"직접",E:"누락",X:"오류"};
+  const rows=[head.join("\t")];
+  results.res.forEach(r=>{const c=r.row.cells;r.mon.forEach((x,m)=>{if(!x.S)return;rows.push([state.verName,cond,r.row.excelRow,c[COL.사업부],c[COL.부서],c[COL.제품군],c[COL.상세제품군],c[COL.거래처],c[COL.BACKLOG],c[COL.프로젝트],r.cur,m+1,x.tw,x.th,x.S,x.lme??"",L[x.fL],x.fx??"",L[x.fF],x.add,x.idx,x.qty,x.fxAmt].map(tsvCell).join("\t"));});});
+  copyText(rows.join("\n"));};
+$("dlCsv").onclick=()=>{if(!need())return;
+  const csvCell=v=>{v=String(clean(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const head=[];for(let k=parsed.off;k<=LASTCOL;k++)head.push(colName(k));
+  const lines=[[...head,...flagHead()].map(csvCell).join(","),...results.res.map(r=>[...fullRow(r),...flagRow(r)].map(csvCell).join(","))];
+  const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="1단계_결과_"+(state.conds[results.ci].name||"조건")+".csv";a.click();};
+
+/* ---------------- 가상 예시 ---------------- */
+function sampleTSV(){
+  // [사업부,부서,제품군,상세,거래처,BACKLOG,프로젝트,선종,수수료,운송,연동,통화, 세선비중,세선지수,태선비중,태선지수,수주LME, 월매출, LME규칙, 환율규칙, 이익률]
+  const G="지침";
+  const spec=[
+    ["선박선","국내","상선용","JIS","가나해운","BACKLOG","H-2101 / 가나해운","컨테이너선","0%","0%","Y","KRW",0.7,30.5,0.3,26.8,12800,[200,0,150,300,0,200,250,0,180,0,220,100],m=>G,m=>G,"3%"],
+    ["선박선","해외","상선용","XLPE","Alpha Shipping","BACKLOG","H-3302 / Alpha","LNG선","2%","1.5%","Y","USD",0.6,26.0,0.4,22.5,13200,[0,500,500,0,400,0,600,0,0,500,0,0],m=>m<6?13800:G,m=>m<6?1385:G,"5%"],
+    ["선박선","해외","해양용","NEK","Nippon Marine","신규","FPSO-7 / Nippon","해양플랜트","3%","2%","N","JPY",0.5,34.0,0.5,31.0,13500,[0,0,300,300,300,0,0,300,300,0,0,0],m=>G,m=>G,"4%"],
+    ["광통신","국내","광케이블","루즈튜브용","다라통신","신규","LT-2027","","0%","0%","N","KRW",1,120.0,0,0,14000,[80,80,80,80,80,80,80,80,80,80,80,80],m=>G,m=>G,"8%"],
+    ["선박선","국내","상선용","고무선","마바조선","BACKLOG","H-1188 / 마바","벌크선","0%","0%","Y","KRW",0.8,31.0,0.2,28.0,12600,[120,120,120,0,0,0,0,0,0,0,0,0],m=>m===2?"":G,m=>G,"6%"],
+    ["선박선","신사업","전력용","전력선","사아에너지","신규","해상풍력 1단계","","1%","0%","Y","KRW",0.2,36.0,0.8,33.0,13000,[0,0,0,1000,1000,1500,1500,1500,1000,1000,500,0],m=>G,m=>G,"7%"],
+    ["선박선","국내","상선용","TYPE P","자차해운","BACKLOG","H-2290 / 자차","탱커","0%","0%","Y","KRW",0.65,33.0,0.35,30.0,13100,[60,60,60,60,60,60,60,60,60,60,60,60],m=>[13900,13950,14000,14050,14100,14150,14200,14250,14300,14350,14400,14450][m],m=>G,"2%"],
+    ["선박선","국내","상선용","MIL","카타방산","신규","MIL-K / 카타","함정","0%","0%","N","KRW",1,49.8,0,0,"",[0,0,0,0,0,0,40,40,40,0,0,0],m=>G,m=>G,"10%"]
+  ];
+  const rows=[];
+  spec.forEach((s,i)=>{
+    const cells=Array(LASTCOL+1).fill("");
+    cells[1]=String(i+1); for(let k=0;k<17;k++) cells[2+k]=String(s[k]);
+    for(let m=0;m<12;m++){const b=M0+m*MW;cells[b+OFF.매출]=s[17][m]?String(s[17][m]):"";
+      const l=s[18](m),f=s[19](m);cells[b+OFF.LME]=s[17][m]||l!==G?String(l):"";cells[b+OFF.동환율]=s[17][m]||f!==G?String(f):"";cells[b+OFF.이익률]=s[20];}
+    rows.push(cells.slice(1).join("\t"));
+  });
+  rows.push(["","합계"].join("\t")); // 제외되어야 하는 합계 행
+  return rows.join("\n");
+}
+
+/* ---------------- 탭 ---------------- */
+function showTab(t){document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll("section.tab").forEach(s=>s.classList.toggle("on",s.id==="t-"+t));}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+
+/* ---------------- 시작 ---------------- */
+load();
+$("pasteBox").value=state.paste||"";$("verName").value=state.verName||"";$("startCol").value=state.startCol||"auto";$("startRow").value=state.startRow||15;
+renderConds();
+parsed=state.paste?parsePaste():null;
+if(parsed) $("pasteInfo").textContent=`데이터 ${parsed.rows.length}행 인식 · 제외 ${parsed.skipped}행 · 시작열 ${colName(parsed.off)}열`;
+refresh();
+</script>
+</body>
+</html>
