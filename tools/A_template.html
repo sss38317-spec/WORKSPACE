@@ -141,7 +141,8 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
     <div class="row" style="margin-bottom:8px">
       <label>표시 <select id="repView"><option value="all">월별 + 연간</option><option value="year">연간만</option></select></label>
       <label>제품군 <select id="repG"><option value="">전체</option></select></label>
-      <button class="btn pri" id="cpRep">보고 양식 복사 (엑셀 붙여넣기용)</button>
+      <button class="btn" id="cpRep">보고 양식 복사 (서식 포함, 값)</button>
+      <button class="btn pri" id="xlsxRep">엑셀 다운로드 (서식 + 수식)</button>
       <button class="btn" id="dlRep">CSV 다운로드</button>
     </div>
     <p class="help">행: 제품군 → 상세분류 → 거래처 → 부서, 묶음마다 7줄. 열: 매출 전체 | <span style="background:var(--prod)">&nbsp;제품&nbsp;</span> | <span style="background:var(--merch)">&nbsp;상품&nbsp;</span>. 상품은 재료비 전액을 부재료비로 표시합니다.</p>
@@ -153,7 +154,8 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
   <div class="card">
     <div class="row" style="margin-bottom:8px">
       <label>월 <select id="detM"></select></label>
-      <button class="btn pri" id="cpDet">상세 전체 복사 (월별 12열 × 12개월 + 연간)</button>
+      <button class="btn" id="cpDet">상세 전체 복사 (월별 12열 × 12개월 + 연간)</button>
+      <button class="btn pri" id="xlsxDet">엑셀 다운로드 (서식 + 수식)</button>
       <button class="btn" id="dlDet">CSV 다운로드</button>
     </div>
     <p class="help">영업 매출계획과 같은 행(선박선)·같은 앞부분 열(사업부~수주LME) 뒤에 월별 재료비 항목을 붙인 상세 결과입니다. 화면은 선택한 월만 표시합니다.</p>
@@ -466,7 +468,7 @@ function renderDetail(){
 function toast(t){const e=$("toast");e.textContent=t;e.classList.add("on");setTimeout(()=>e.classList.remove("on"),1800);}
 async function copyText(t){try{await navigator.clipboard.writeText(t);}catch(e){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();}toast("복사했습니다. 엑셀에 붙여넣으세요");}
 function dl(name,rows){const csv=v=>{v=String(clean(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const blob=new Blob(["﻿"+rows.map(r=>r.map(csv).join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+  const blob=new Blob(["﻿"+rows.map(r=>r.map(csv).join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});saveBlob(blob,name);}
 function needOk(){if(!RES||!RES.ok){toast("먼저 계산하세요 (③ 검증 확인)");return false;}return true;}
 function reportRows(){
   const ms=[...MONTHS.map((_,m)=>m),"Y"], ml=m=>m==="Y"?"연간":(m+1)+"월";
@@ -489,6 +491,7 @@ $("dlDet").onclick=()=>{if(!needOk())return;dl("재료비_상세.csv",detailRows
 $("repView").onchange=()=>RES&&RES.ok&&renderReport();
 $("repG").onchange=()=>RES&&RES.ok&&renderReport();
 $("detM").onchange=()=>RES&&RES.ok&&renderDetail();
+__XLSX__
 /* --- 예시 --- */
 const SAMPLES=__SAMPLES__;
 $("sampleAll").onclick=()=>{$("in-sales").value=SAMPLES.sales;$("in-prod").value=SAMPLES.prod;$("in-basis").value=SAMPLES.basis;$("in-ratio").value=SAMPLES.ratio;$("in-coef").value=SAMPLES.coef;
