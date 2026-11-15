@@ -40,9 +40,12 @@ PCT = '0.0%;(0.0%);"-"'
 
 R1, NROWS = 15, 200            # 데이터 15행 ~ 214행
 RE = R1 + NROWS - 1
-M0, MW = CI("S"), 16           # 1월 시작열, 월 블록 폭
-Y0 = M0 + 12 * MW              # HC
-ADJ = CI("IW")                 # 동량지수 조정률(예외)
+ADJ = CI("S")                  # 동량지수 조정률(예외) — 1월 동량 바로 앞
+M0, MW = CI("T"), 16           # 1월 시작열(T), 월 블록 폭
+Y0 = M0 + 12 * MW              # 연간 시작 HD
+SRC_M0 = CI("S")               # 원본 양식의 1월 시작열
+LASTC = Y0 + 45                # 마지막 열 (해외운송비 차이 IW)
+SHIFT = lambda c: c + 1 if c >= SRC_M0 else c   # 원본 열 → 새 열
 OFF = dict(S=0, T=1, U=2, V=3, W=4, X=5, Y=6, Z=7, AA=8, AB=9, AC=10, AD=11, AE=12, AF=13, AG=14, AH=15)
 def mc(m, k): return L(M0 + m * MW + OFF[k])
 
@@ -113,11 +116,14 @@ ws = wb.create_sheet("27년 매출월별상세", 0)
 for r in range(1, 15):
     for c in range(1, 257):
         v = s_main.cell(r, c).value
-        if v is not None: ws.cell(r, c, v)
+        if v is not None: ws.cell(r, SHIFT(c), v)
 for m in s_main.merged_cells.ranges:
-    if m.max_row <= 14: ws.merge_cells(str(m))
+    if m.max_row <= 14:
+        ws.merge_cells(start_row=m.min_row, end_row=m.max_row, start_column=SHIFT(m.min_col), end_column=SHIFT(m.max_col))
 for k, d in s_main.column_dimensions.items():
-    if d.width: ws.column_dimensions[k].width = d.width
+    if d.width and d.min:
+        for c in range(d.min, (d.max or d.min) + 1):
+            if c <= 256: ws.column_dimensions[L(SHIFT(c))].width = d.width
 for r in range(1, 15):
     if s_main.row_dimensions[r].height: ws.row_dimensions[r].height = s_main.row_dimensions[r].height
 ws.row_dimensions[12].height = 120
@@ -130,10 +136,10 @@ for r in range(1, 11):
         if ws.cell(r, c).value is not None: ws.cell(r, c).font = f_note
 ws["B9"].font = f_title
 # 작성 안내 추가 (S6~S8)
-ws["S6"] = "* LME·동적용환율: 숫자(직접입력) 또는 \"지침\" 입력 → \"지침\"이면 사업계획지침 시트 값 자동 적용 (빈칸 = 입력 누락, 빨간색)"
-ws["S7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
-ws["S8"] = "* IW열 '동량지수 조정률(예외)': 일부 거래선만 동량지수를 낮출 때 입력 (예: 3.4%)"
-for k in ("S6", "S7", "S8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
+ws["T6"] = "* LME·동적용환율: 숫자(직접입력) 또는 \"지침\" 입력 → \"지침\"이면 사업계획지침 시트 값 자동 적용 (빈칸 = 입력 누락, 빨간색)"
+ws["T7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
+ws["T8"] = "* S열 '동량지수 조정률(예외)': 일부 거래선만 동량지수(톤당단가)를 낮출 때 입력 (예: 3.4%) → 12개월 전체에 적용"
+for k in ("T6", "T7", "T8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
 # 월 블록 머리글 보정
 for m in range(12):
     ws[f"{mc(m,'AA')}14"] = "*LME\n(숫자 또는 \"지침\")"
@@ -146,7 +152,7 @@ for r in (12, 13, 14):
 ws.column_dimensions[L(ADJ)].width = 12
 # HQ~IV 머리글 (원본 값 유지됨) + 스타일
 for r in range(12, 15):
-    for c in range(Y0 + 13, ADJ):
+    for c in range(Y0 + 13, LASTC + 1):
         x = ws.cell(r, c)
         if x.value is not None: x.font = f_b; x.alignment = wrap; x.fill = fill_hd; x.border = bd
 
@@ -158,7 +164,7 @@ for r in range(15, 31):
     adj = 0.034 if "3.4%" in t else None
     d = {"base": [s_main.cell(r, c).value for c in range(2, 14)], "adj": adj, "m": []}
     for m in range(12):
-        def v(k): return s_main.cell(r, M0 + m * MW + OFF[k]).value
+        def v(k): return s_main.cell(r, SRC_M0 + m * MW + OFF[k]).value
         lme, fx = v("AA"), v("AD")
         d["m"].append(dict(W=v("W"), AA=("지침" if lme == 14500 else lme), AD=("지침" if fx == 1360 else fx), AG=v("AG")))
     example.append(d)
@@ -223,15 +229,15 @@ for i in range(NROWS):
     ws[a(12)] = "=" + "+".join(AH_)
     for k, f in enumerate([NUM2, NUM2, NUM0, NUM1, NUM0, "#,##0", "#,##0", "#,##0", "#,##0.00", "#,##0.00", NUM2, "0.0%", NUM1]):
         ws[a(k)].number_format = f; ws[a(k)].fill = fill_sum
-    # HP, 판매수수료(HQ~IC), 해외운송비(IE~IQ), IU, IV
-    ws[f"HP{r}"] = f"={a(5)}*{a(0)}"
+    # 동량×LME, 판매수수료(월별+합계), 해외운송비(월별+합계), 동재료비 검산
+    ws[f"{L(Y0+13)}{r}"] = f"={a(5)}*{a(0)}"
     for m in range(12):
-        ws[f"{L(CI('HQ')+m)}{r}"] = f"={mc(m,'W')}{r}*N($J{r})"
-        ws[f"{L(CI('IE')+m)}{r}"] = f"={mc(m,'W')}{r}*N($K{r})"
-    ws[f"IC{r}"] = f"=SUM(HQ{r}:IB{r})"; ws[f"IQ{r}"] = f"=SUM(IE{r}:IP{r})"
-    ws[f"IU{r}"] = f"={a(4)}*{a(0)}/1000"; ws[f"IV{r}"] = f"=IU{r}-{a(3)}"
-    for c in range(1, ADJ + 1): ws.cell(r, c).border = bd
-    for c in range(14, ADJ):
+        ws[f"{L(Y0+14+m)}{r}"] = f"={mc(m,'W')}{r}*N($J{r})"
+        ws[f"{L(Y0+28+m)}{r}"] = f"={mc(m,'W')}{r}*N($K{r})"
+    ws[f"{L(Y0+26)}{r}"] = f"=SUM({L(Y0+14)}{r}:{L(Y0+25)}{r})"; ws[f"{L(Y0+40)}{r}"] = f"=SUM({L(Y0+28)}{r}:{L(Y0+39)}{r})"
+    ws[f"{L(Y0+44)}{r}"] = f"={a(4)}*{a(0)}/1000"; ws[f"{L(Y0+45)}{r}"] = f"={L(Y0+44)}{r}-{a(3)}"
+    for c in range(1, LASTC + 1): ws.cell(r, c).border = bd
+    for c in range(14, LASTC + 1):
         x = ws.cell(r, c)
         if x.font != f_in: x.font = f_base
 
@@ -258,12 +264,12 @@ def sum_cols():
                 (mc(m, "Z"), ("ratio1000", mc(m, "Y"), mc(m, "S"))), (mc(m, "AG"), ("ratio", mc(m, "AH"), mc(m, "W"))), (mc(m, "AH"), "sum")]
     A = lambda k: L(Y0 + k)
     out += [(A(0), "sum"), (A(1), ("ratio", A(2), A(0))), (A(2), "sum"), (A(3), "sum"), (A(4), ("ratio1000", A(3), A(0))),
-            (A(11), ("ratio", A(12), A(2))), (A(12), "sum"), ("IC", "sum"), ("IQ", "sum")]
+            (A(11), ("ratio", A(12), A(2))), (A(12), "sum"), (A(26), "sum"), (A(40), "sum")]
     return out
 COLS = sum_cols()
 def write_row(r, label, kind):
     ws.cell(r, 3, label).font = f_b
-    for c in range(2, ADJ): ws.cell(r, c).fill = fill_sum
+    for c in range(2, LASTC + 1): ws.cell(r, c).fill = fill_sum
     for colL, how in COLS:
         if how == "sum":
             if kind[0] == "subtotal": f = f"=SUBTOTAL(9,{colL}{R1}:{colL}{RE})"
@@ -297,7 +303,7 @@ for colL, how in COLS:
 ws.cell(r + 1, 3, "※ FALSE이면 상세제품군 목록(제품군별)에 없는 품목이 있습니다. 소계 행을 추가하세요.").font = f_note
 
 # ---- 시트 보호 / 보기 설정
-ws.freeze_panes = "S15"
+ws.freeze_panes = "I15"
 ws.sheet_view.zoomScale = 85
 ws.protection.sheet = True
 ws.protection.insertColumns = True     # 열 삽입 금지
@@ -308,7 +314,7 @@ ws.protection.formatColumns = False
 ws.protection.formatRows = False
 ws.protection.autoFilter = False
 ws.protection.sort = False
-ws.auto_filter.ref = f"B14:{L(ADJ)}{RE}"
+ws.auto_filter.ref = f"B14:{L(LASTC)}{RE}"
 ws.sheet_properties.tabColor = "1F3864"
 g.sheet_properties.tabColor = "FFC000"
 wb.active = 0
