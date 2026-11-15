@@ -1,6 +1,6 @@
 """재료비 기준 양식: ① 재료비동가 (26년 11월 ~ 27년 12월), ② 상품재료비율 (제품군별 1개).
 
-사용: python build_basis_template.py <출력.xlsx>
+사용: python build_basis_template.py <출력.xlsx> [영업 예시양식.xlsx (동량지수 시트 예시 복사용)]
 기존 '재료비 동가 예시' 산식을 따르되: 월별 지침 값, 연간 목표 프리미엄 1개, 26년 11·12월 예상 값, 전월 매입동가 = 당월 적용동가.
 """
 import sys
@@ -10,6 +10,7 @@ from openpyxl.utils import get_column_letter as L
 from openpyxl.formatting.rule import FormulaRule
 
 OUT = sys.argv[1]
+SRC = sys.argv[2] if len(sys.argv) > 2 else None
 F = "맑은 고딕"
 f_b = Font(name=F, size=9, bold=True); f_in = Font(name=F, size=9, color="0000FF"); f_c = Font(name=F, size=9)
 f_t = Font(name=F, size=12, bold=True, color="1F3864"); f_n = Font(name=F, size=9, color="595959")
@@ -130,4 +131,38 @@ for i, nm in enumerate(["상선용", "해양용", "이동용", "전력용"]):
     y = g.cell(r, 4); y.fill = yin; y.font = f_in
 g["B9"] = "※ 상품(생산/OEM) 재료비 = 상품 매출액 × 상품재료비율 → 전액 부재료비로 표시"; g["B9"].font = Font(name=F, size=9, color="C00000")
 g["B10"] = "※ 제품군 이름은 영업 매출계획 D열·생산계획 제품분류와 같아야 합니다. 제품군을 추가하면 행을 늘려 입력하세요."; g["B10"].font = Font(name=F, size=9, color="C00000")
+# ---- 동량지수_부재료비 (B~R = 영업 양식 동량지수 시트와 같은 구조, U·V = 부재료비 계수)
+ix = wb.create_sheet("동량지수_부재료비")
+if SRC:
+    import openpyxl
+    s_idx = openpyxl.load_workbook(SRC)["동량지수_1~9월 매출품목"]
+    for row in s_idx.iter_rows(min_row=1, max_row=s_idx.max_row):
+        for c in row:
+            if c.value is None or c.column > 18: continue
+            n = ix.cell(c.row, c.column, c.value); n.font = f_c
+            if c.row >= 12 and c.column >= 3 and not (isinstance(c.value, str) and c.value.startswith("=")): n.font = f_in
+    for m in s_idx.merged_cells.ranges: ix.merge_cells(str(m))
+    for k, d in s_idx.column_dimensions.items():
+        if d.width and d.min:
+            for cc in range(d.min, (d.max or d.min) + 1):
+                if cc <= 18: ix.column_dimensions[L(cc)].width = d.width
+for c in range(2, 19):
+    for r in (10, 11): ix.cell(r, c).font = f_b; ix.cell(r, c).fill = hd; ix.cell(r, c).alignment = ctr
+ix.merge_cells("U10:V10"); ix["U10"] = "부재료비 계수 (백만원/톤)"
+ix["U11"] = "세선"; ix["V11"] = "태선"
+for col in ("U", "V"):
+    ix.column_dimensions[col].width = 11
+    for r in (10, 11): ix[f"{col}{r}"].font = f_b; ix[f"{col}{r}"].fill = PatternFill("solid", fgColor="FFE699"); ix[f"{col}{r}"].alignment = ctr; ix[f"{col}{r}"].border = bd
+last = max([r for r in range(12, ix.max_row + 1) if ix.cell(r, 3).value is not None] + [11])
+for r in range(12, max(last, 40) + 1):
+    for col in ("U", "V"):
+        x = ix[f"{col}{r}"]; x.border = bd; x.number_format = "0.000"
+        k = ix[f"K{r}"].value   # 윗행을 참조하는 행(예: USD 행 =+K12)은 계수도 윗행 참조
+        if isinstance(k, str) and k.startswith("=+K"): x.value = f"=+{col}{k[3:]}"; x.font = f_c
+        else: x.font = f_in; x.fill = yin
+ix["B2"] = "동량지수 + 부재료비 계수"; ix["B2"].font = f_t
+notes = ["※ B~R열: 영업 매출계획 양식의 '동량지수_1~9월 매출품목' 시트를 그대로 복사해 붙여넣습니다 (같은 구조).",
+         "※ U·V열: 세선·태선 부재료비 계수(백만원/톤)를 입력합니다. B~R열을 다시 붙여넣어도 U·V열은 지워지지 않습니다 (행 순서가 바뀌면 계수도 같이 옮기세요).",
+         "※ 거래처 행의 부재료비 단가 = 세선비중 × 세선 계수 + 태선비중 × 태선 계수 (키: 제품군+상세+거래선+통화, B열)"]
+for i, t in enumerate(notes): ix.cell(4 + i, 2, t).font = Font(name=F, size=9, color="C00000")
 wb.save(OUT); print("saved", OUT)
