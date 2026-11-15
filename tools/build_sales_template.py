@@ -4,7 +4,7 @@
 - 원본에서 머리글(1~14행), 예시 데이터(15~30행), 동량지수 시트를 가져온다.
 - LME(AA)·동적용환율(AD) 칸: 드롭다운 "사업계획 지침" 선택 시 시트 매크로가
   사업계획지침 시트를 참조하는 수식을 넣는다 (코드: tools/vba/시트코드_매출계획.txt).
-- IX~JU열 구분 칸은 수식(ISFORMULA)으로 "지침"/"직접"을 표시한다.
+- IY~JV열 구분 칸은 수식(ISFORMULA)으로 "지침"/"직접"을 표시한다.
 """
 import sys
 import openpyxl
@@ -42,13 +42,14 @@ PCT = '0.0%;(0.0%);"-"'
 
 R1, NROWS = 15, 200            # 데이터 15행 ~ 214행
 RE = R1 + NROWS - 1
-M0, MW = CI("S"), 16           # 1월 시작열(S), 월 블록 폭 (원본과 동일)
-Y0 = M0 + 12 * MW              # 연간 시작 HC
-SRC_M0 = CI("S")
-LASTC = Y0 + 45                # IV
-FLAG0 = CI("IX")               # 구분 열: IX~JI = LME구분 1~12월, JJ~JU = 환율구분 1~12월
+ADJ = CI("S")                  # 동량지수 조정률(예외) — 1월 동량 바로 앞
+M0, MW = CI("T"), 16           # 1월 시작열(T), 월 블록 폭
+Y0 = M0 + 12 * MW              # 연간 시작 HD
+SRC_M0 = CI("S")               # 원본 양식의 1월 시작열
+LASTC = Y0 + 45                # IW (해외운송비 차이)
+FLAG0 = LASTC + 2              # 구분 열: IY~JJ = LME구분 1~12월, JK~JV = 환율구분 1~12월
 FLAGE = FLAG0 + 23
-SHIFT = lambda c: c
+SHIFT = lambda c: c + 1 if c >= SRC_M0 else c   # 원본 열 → 새 열
 OFF = dict(S=0, T=1, U=2, V=3, W=4, X=5, Y=6, Z=7, AA=8, AB=9, AC=10, AD=11, AE=12, AF=13, AG=14, AH=15)
 def mc(m, k): return L(M0 + m * MW + OFF[k])
 
@@ -139,16 +140,20 @@ for r in range(1, 11):
         if ws.cell(r, c).value is not None: ws.cell(r, c).font = f_note
 ws["B9"].font = f_title
 # 작성 안내 추가 (S6~S8)
-ws["S6"] = "* LME·동적용환율: 목록에서 \"사업계획 지침\" 선택 → 사업계획지침 값이 수식으로 연결(파란색) / 계약조건은 숫자 직접 입력 (빈칸 = 입력 누락, 빨간색)"
-ws["S7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
-ws["S8"] = "* 지침/직접 구분은 IX~JU열에 수식으로 자동 표시됩니다 (수정 금지)."
-for k in ("S6", "S7", "S8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
+ws["T6"] = "* LME·동적용환율: 목록에서 \"사업계획 지침\" 선택 → 사업계획지침 값이 수식으로 연결(파란색) / 계약조건은 숫자 직접 입력 (빈칸 = 입력 누락, 빨간색)"
+ws["T7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
+ws["T8"] = "* 지침/직접 구분은 IY~JV열에 수식으로 자동 표시됩니다 (수정 금지)."
+for k in ("T6", "T7", "T8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
 # 월 블록 머리글 보정
 for m in range(12):
     ws[f"{mc(m,'AA')}14"] = "*LME\n(지침 선택 또는 입력)"
     ws[f"{mc(m,'AD')}14"] = "*동적용환율\n(지침 선택 또는 입력)"
     ws[f"{mc(m,'AB')}14"] = "동프리미엄\n(지침 일괄)"
     ws[f"{mc(m,'AE')}14"] = "사업계획환율\n(지침 일괄)"
+ws[f"{L(ADJ)}12"] = "동량지수 조정률\n(예외)"; ws[f"{L(ADJ)}13"] = "%"; ws[f"{L(ADJ)}14"] = "일부 거래선만\n입력 (예: 3.4%)"
+for r in (12, 13, 14):
+    x = ws.cell(r, ADJ); x.font = f_b; x.alignment = wrap; x.border = bd; x.fill = fill_hd
+ws.column_dimensions[L(ADJ)].width = 12
 ws.merge_cells(start_row=12, end_row=12, start_column=FLAG0, end_column=FLAGE)
 ws.cell(12, FLAG0, "지침/직접 구분 (VBA 자동 기록 · 수정 금지)")
 ws.merge_cells(start_row=13, end_row=13, start_column=FLAG0, end_column=FLAG0 + 11); ws.cell(13, FLAG0, "LME")
@@ -199,7 +204,7 @@ for i in range(NROWS):
         c = {k: mc(m, k) for k in OFF}
         lme, fx = eff(c["AA"], r, g_lme(m)), eff(c["AD"], r, g_fx(m))
         ws[f"{c['S']}{r}"] = f"=IFERROR(ROUND({c['W']}{r}/{c['T']}{r},2),0)"
-        ws[f"{c['T']}{r}"] = f"=IF($E{r}=\"\",0,(($O{r}*{c['U']}{r}+$Q{r}*{c['V']}{r})+{c['X']}{r})" + (f"*(1-{ex['adj']*100:g}%)" if ex and ex["adj"] else "") + ")"
+        ws[f"{c['T']}{r}"] = f"=IF($E{r}=\"\",0,(($O{r}*{c['U']}{r}+$Q{r}*{c['V']}{r})+{c['X']}{r})*(1-N(${L(ADJ)}{r})))"
         ws[f"{c['U']}{r}"] = f"=$N{r}"
         ws[f"{c['V']}{r}"] = f"=$P{r}"
         ws[f"{c['X']}{r}"] = f"=ROUNDDOWN(IF({c['AA']}{r}=\"\",0,({lme}-N($R{r}))*{fx}/1000000),2)"
@@ -220,6 +225,8 @@ for i in range(NROWS):
         fm = {"S": NUM2, "T": "#,##0.00##", "U": "0.0##%", "V": "0.0##%", "W": "General", "X": NUM2, "Y": NUM1, "Z": NUM0,
               "AA": "General", "AB": "#,##0", "AC": "#,##0", "AD": "General", "AE": "#,##0.00", "AF": NUM2, "AG": "0.0##%", "AH": NUM1}
         for k, f in fm.items(): ws[f"{c[k]}{r}"].number_format = f
+    # 동량지수 조정률(예외)
+    x = ws.cell(r, ADJ, ex["adj"] if ex else None); x.font = f_in; x.protection = UNLOCK; x.fill = fill_in; x.number_format = "0.0##%"
     # 구분 열: 수식이면 "지침", 숫자면 "직접"
     for m in range(12):
         for j, k in ((0, "AA"), (12, "AD")):
@@ -346,16 +353,17 @@ lines = [
  ("• 계약조건(직접 입력): 숫자를 입력합니다. \"지침\" 또는 \"사업계획 지침\"을 직접 타이핑해도 됩니다.", f_base),
  ("• 사업계획지침 시트 값을 바꾸면 '지침' 칸은 수식이라 자동으로 바뀝니다 (별도 실행 불필요).", f_base),
  ("• 지침 칸을 다른 달로 복사해도 매크로가 해당 월 지침으로 자동 보정합니다.", f_base),
- ("• IX~JU열은 수식으로 '지침'(수식 칸) / '직접'(숫자 칸)을 표시합니다. 1단계 HTML이 이 열을 읽습니다.", f_base),
+ ("• IY~JV열은 수식으로 '지침'(수식 칸) / '직접'(숫자 칸)을 표시합니다. 1단계 HTML이 이 열을 읽습니다.", f_base),
  ("• 색상: 파란색 = 지침 / 빨간색 = 매출이 있는데 빈칸", f_base),
+ ("• S열 '동량지수 조정률(예외)': 일부 거래선만 동량지수(톤당단가)를 낮출 때 입력 (예: 3.4%) → 해당 행 12개월에 적용", f_base),
  ("", f_base),
  ("열을 삽입·이동했을 때", f_title),
  ("• 매크로는 12행 월 머리글(\"1월\"~\"12월\")과 14행 항목 머리글(\"*LME\"·\"*동적용환율\"로 시작)로 열을 찾으므로, 머리글 글자를 유지하면 수정이 필요 없습니다.", f_base),
- ("• 이미 들어 있는 지침 수식과 IX~JU 구분 수식은 엑셀이 열 삽입에 맞춰 자동으로 조정합니다.", f_base),
+ ("• 이미 들어 있는 지침 수식과 IY~JV 구분 수식은 엑셀이 열 삽입에 맞춰 자동으로 조정합니다.", f_base),
  ("• 다음을 바꾸면 시트 코드 맨 위 [설정] 부분만 고칩니다:", f_base),
  ("     - 지침 시트 이름 → GUIDE_SHEET   /   머리글 행(12·14행), 데이터 시작 행(15행) → ROW_MONTH · ROW_ITEM · ROW_FIRST", f_base),
  ("     - 머리글 시작 글자 → HDR_LME · HDR_FX   /   지침 시트의 LME 행(11)·환율 행(14)·1월 열(C=3) → G_ROW_LME · G_ROW_FX · G_COL_JAN", f_base),
- ("• 1단계 HTML은 원본 열 위치(S열 = 1월 동량, 월 16열, 구분 열 IX~JU) 기준입니다. 열을 바꾸면 HTML 상단 열 위치 설정도 함께 바꿔야 합니다.", f_base),
+ ("• 1단계 HTML은 이 양식 열 위치(S열 = 동량지수 조정률, T열 = 1월 동량, 월 16열, 구분 열 IY~JV) 기준입니다. 열을 바꾸면 HTML 상단 열 위치 설정도 함께 바꿔야 합니다.", f_base),
 ]
 for i, (t, f) in enumerate(lines):
     h.cell(2 + i, 2, t).font = f
