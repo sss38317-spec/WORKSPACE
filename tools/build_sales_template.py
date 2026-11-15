@@ -100,19 +100,44 @@ notes = ["※ 노란 칸만 수정합니다. 동적용환율 기본값은 USD �
          "※ 영업 매출계획 시트: LME·동적용환율 칸에 숫자(직접입력) 또는 \"지침\"을 입력. 빈칸은 입력 누락으로 빨간색 표시."]
 for i, t in enumerate(notes): g.cell(17 + i, 2, t).font = f_note
 
-# =============================================================== 동량지수 시트 (원본 복사)
+# =============================================================== 동량지수 시트 (원본 복사 + 부재료비 계수)
+# 원본 O~R(태선) → P~S, 신규 O = 세선 부재료비 계수, T = 태선 부재료비 계수
+import re as _re
+IXS = lambda c: c + 1 if c >= 15 else c
+def _shift_formula(f):
+    return _re.sub(r"(\$?)([A-Z]{1,2})(\$?\d+)", lambda m: m.group(1) + L(IXS(CI(m.group(2)))) + m.group(3), f)
 ix = wb.create_sheet("동량지수_1~9월 매출품목")
 for row in s_idx.iter_rows(min_row=1, max_row=s_idx.max_row):
     for c in row:
         if c.value is None: continue
-        n = ix.cell(c.row, c.column, c.value); n.font = f_base
-        if c.row >= 12 and c.column >= 3 and not (isinstance(c.value, str) and c.value.startswith("=")):
+        v = c.value
+        if isinstance(v, str) and v.startswith("=") and c.row >= 12: v = _shift_formula(v)
+        n = ix.cell(c.row, IXS(c.column), v); n.font = f_base
+        if c.row >= 12 and c.column >= 3 and not (isinstance(v, str) and str(v).startswith("=")):
             n.font = f_in
-for m in s_idx.merged_cells.ranges: ix.merge_cells(str(m))
-for k, d in s_idx.column_dimensions.items(): ix.column_dimensions[k].width = d.width
-for c in range(2, 19):
+for m in s_idx.merged_cells.ranges:
+    a, b = m.min_col, m.max_col
+    if m.min_row == 10 and a == 11: b = 15            # 세선 머리글 K10:O10
+    elif m.min_row == 10 and a == 15: a, b = 16, 20   # 태선 머리글 P10:T10
+    else: a, b = IXS(a), IXS(b)
+    ix.merge_cells(start_row=m.min_row, end_row=m.max_row, start_column=a, end_column=b)
+for k, d in s_idx.column_dimensions.items():
+    if d.width and d.min:
+        for c in range(d.min, (d.max or d.min) + 1): ix.column_dimensions[L(IXS(c))].width = d.width
+ix["O11"] = "부재료비 계수\n(백만원/톤)"; ix["T11"] = "부재료비 계수\n(백만원/톤)"
+for col in ("O", "T"):
+    ix.column_dimensions[col].width = 12
+    for r in range(12, 300):
+        if ix.cell(r, 3).value is not None:
+            x = ix[f"{col}{r}"]; x.font = f_in; x.fill = fill_in; x.number_format = "0.000"
+            k = ix[f"K{r}"].value   # 위 행을 참조하는 행(예: USD 행 =+K12)은 계수도 같은 방식으로 참조
+            if isinstance(k, str) and k.startswith("=+K"): x.value = f"=+{col}{k[3:]}"; x.font = f_base; x.fill = PatternFill()
+for c in range(2, 21):
     for r in (10, 11): ix.cell(r, c).font = f_b; ix.cell(r, c).fill = fill_hd; ix.cell(r, c).alignment = wrap
-ix["T10"] = "※ 행을 추가하면 B열 CONCATENATE 수식도 같이 복사하세요 (매출계획 N~R열이 이 표를 VLOOKUP 합니다)."; ix["T10"].font = f_note
+for col in ("O", "T"):
+    for r in (10, 11): ix[f"{col}{r}"].fill = PatternFill("solid", fgColor="FFE699")
+ix["V10"] = "※ 행을 추가하면 B열 CONCATENATE 수식도 같이 복사하세요 (매출계획 N~R열이 이 표를 VLOOKUP 합니다)."; ix["V10"].font = f_note
+ix["V11"] = "※ O·T열 부재료비 계수(백만원/톤): 거래선 행의 부재료비 단가 = 세선비중×O + 태선비중×T (재료비 계산 HTML이 사용)"; ix["V11"].font = f_note
 
 # =============================================================== 매출계획 시트
 ws = wb.create_sheet("27년 매출월별상세", 0)
@@ -196,8 +221,8 @@ for i in range(NROWS):
         x = ws.cell(r, c, ex["base"][k] if ex else None); x.font = f_in; x.protection = UNLOCK; x.fill = fill_in
     # B블록 (N~R) VLOOKUP
     key = f"CONCATENATE($D{r},$E{r},$F{r},$M{r})"
-    rng = "'동량지수_1~9월 매출품목'!$B$12:$R$300"
-    for col, n in (("N", 10), ("O", 13), ("P", 14), ("Q", 17), ("R", 8)):
+    rng = "'동량지수_1~9월 매출품목'!$B$12:$T$300"
+    for col, n in (("N", 10), ("O", 13), ("P", 15), ("Q", 18), ("R", 8)):
         ws[f"{col}{r}"] = f'=IF($E{r}="","",VLOOKUP({key},{rng},{n},FALSE))'
         ws[f"{col}{r}"].number_format = "0.0##" if col in "NP" else ("General" if col == "R" else "0.00##")
     for m in range(12):
