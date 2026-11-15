@@ -1,0 +1,88 @@
+'==============================================================================
+' [27년 매출월별상세] 시트 코드 (시트 탭 오른쪽 클릭 → 코드 보기 → 붙여넣기)
+'  - LME·동적용환율 칸에 "사업계획 지침"(또는 "지침") 입력/선택 시
+'    사업계획지침 시트의 해당 월 칸을 참조하는 수식으로 바꿉니다.
+'  - 지침 수식 칸을 다른 달로 복사하면 해당 월 지침으로 자동 보정합니다.
+'  - 열 위치는 머리글 글자로 찾습니다 (열 삽입 시 [설정]만 확인).
+'==============================================================================
+
+'================================ [설정] ======================================
+Private Const GUIDE_SHEET As String = "사업계획지침"   ' 지침 시트 이름
+Private Const ROW_MONTH As Long = 12     ' "1월"~"12월"이 적힌 머리글 행
+Private Const ROW_ITEM As Long = 14      ' "*LME", "*동적용환율"이 적힌 머리글 행
+Private Const ROW_FIRST As Long = 15     ' 데이터 첫 행
+Private Const HDR_LME As String = "*LME"           ' LME 열 머리글 시작 글자
+Private Const HDR_FX As String = "*동적용환율"      ' 동적용환율 열 머리글 시작 글자
+Private Const G_ROW_LME As Long = 11     ' 지침 시트: 월별 LME 행
+Private Const G_ROW_FX As Long = 14      ' 지침 시트: 월별 동적용환율 행
+Private Const G_COL_JAN As Long = 3      ' 지침 시트: 1월 열 (3 = C열)
+'==============================================================================
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+    Dim rng As Range, ar As Range, colR As Range, cell As Range
+    Dim kind As Long, m As Long, lastCol As Long
+
+    Set rng = Intersect(Target, Me.Range(Me.Cells(ROW_FIRST, 1), Me.Cells(Me.Rows.Count, Me.Columns.Count)))
+    If rng Is Nothing Then Exit Sub
+    lastCol = Me.Cells(ROW_ITEM, Me.Columns.Count).End(xlToLeft).Column
+
+    On Error GoTo SafeExit
+    Application.EnableEvents = False
+
+    For Each ar In rng.Areas
+        For Each colR In ar.Columns
+            If colR.Column > lastCol Then Exit For
+            If GetKind(colR.Column, kind, m) Then
+                For Each cell In colR.Cells
+                    FixCell cell, kind, m
+                Next cell
+            End If
+        Next colR
+    Next ar
+
+SafeExit:
+    If Err.Number <> 0 Then MsgBox "지침 처리 중 오류: " & Err.Description, vbExclamation
+    Application.EnableEvents = True
+End Sub
+
+' 한 칸 처리: "지침" 글자 → 지침 수식 / 지침 수식이 다른 달을 가리키면 보정
+Private Sub FixCell(ByVal cell As Range, ByVal kind As Long, ByVal m As Long)
+    Dim f As String, t As String
+    f = "='" & GUIDE_SHEET & "'!" & Worksheets(GUIDE_SHEET).Cells(IIf(kind = 1, G_ROW_LME, G_ROW_FX), G_COL_JAN + m - 1).Address
+
+    If cell.HasFormula Then
+        If InStr(1, cell.Formula, GUIDE_SHEET, vbTextCompare) > 0 Then
+            If Replace(cell.Formula, "'", "") <> Replace(f, "'", "") Then cell.Formula = f
+        End If
+    ElseIf Not IsError(cell.Value) Then
+        t = Replace(Trim$(CStr(cell.Value)), " ", "")
+        If t = "지침" Or t = "사업계획지침" Then
+            cell.Formula = f
+        ElseIf t <> "" And Not IsNumeric(t) Then
+            MsgBox cell.Address(False, False) & ": 숫자를 입력하거나 목록에서 ""사업계획 지침""을 선택하세요.", vbExclamation
+            cell.ClearContents
+        End If
+    End If
+End Sub
+
+' 머리글로 LME(1)/동적용환율(2) 열과 월을 판별
+Private Function GetKind(ByVal col As Long, ByRef kind As Long, ByRef m As Long) As Boolean
+    Dim h As Variant, t As String
+    GetKind = False
+    h = Me.Cells(ROW_ITEM, col).Value
+    If IsError(h) Then Exit Function
+    t = Trim$(CStr(h))
+    If Left$(t, Len(HDR_LME)) = HDR_LME Then
+        kind = 1
+    ElseIf Left$(t, Len(HDR_FX)) = HDR_FX Then
+        kind = 2
+    Else
+        Exit Function
+    End If
+    h = Me.Cells(ROW_MONTH, col).MergeArea.Cells(1, 1).Value
+    If IsError(h) Then Exit Function
+    t = Replace(Trim$(CStr(h)), "월", "")
+    If Not IsNumeric(t) Then Exit Function      ' 연간 열("2027년") 등은 제외
+    m = CLng(t)
+    GetKind = (m >= 1 And m <= 12)
+End Function

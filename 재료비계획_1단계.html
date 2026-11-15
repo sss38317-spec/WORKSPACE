@@ -183,7 +183,7 @@ td.err{background:var(--err-soft)!important;color:var(--err)}
       <tr><th>열(1월)</th><th>항목</th><th>산식 / 출처</th></tr>
       <tr><td>U · V</td><td>세선·태선 비중</td><td>영업 입력값, 비어 있으면 B블록 N·P열</td></tr>
       <tr><td>W</td><td>매출액 (백만원)</td><td>영업 입력 (조건과 무관하게 고정)</td></tr>
-      <tr><td>AA</td><td>LME ($/톤)</td><td>구분(IX~JI열) "지침" → 조건의 월별 LME · "직접" → 입력값 고정</td></tr>
+      <tr><td>AA</td><td>LME ($/톤)</td><td>구분(IX~JI열, 수식이면 "지침") "지침" → 조건의 월별 LME · "직접" → 입력값 고정</td></tr>
       <tr><td>AB</td><td>동프리미엄</td><td>조건의 연간 프리미엄 (일괄)</td></tr>
       <tr><td>AC</td><td>LME+동프리미엄</td><td>AA + AB</td></tr>
       <tr><td>AD</td><td>동적용환율</td><td>구분(JJ~JU열) "지침" → 조건의 월별 환율 · "직접" → 입력값 고정</td></tr>
@@ -245,7 +245,7 @@ function parseNum(s){
 function parseFlag(s){
   const t=(s==null?"":String(s)).trim();
   if(t==="") return {t:"E"};
-  if(t==="지침"||t==="사업계획지침") return {t:"G"};
+  if(t.replace(/\s/g,"")==="지침"||t.replace(/\s/g,"")==="사업계획지침") return {t:"G"};
   const v=parseNum(t); if(v==null||isNaN(v)) return {t:"X",raw:t};
   return {t:"D",v};
 }

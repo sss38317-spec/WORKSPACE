@@ -2,8 +2,9 @@
 
 사용: python build_sales_template.py <원본 예시양식.xlsx> <출력.xlsx>
 - 원본에서 머리글(1~14행), 예시 데이터(15~30행), 동량지수 시트를 가져온다.
-- LME(AA)·동적용환율(AD) 칸: 드롭다운 "지침" 선택 시 VBA가 지침 값(숫자)을 넣고,
-  IX~JU열 구분 칸에 "지침"/"직접"을 기록한다 (VBA: tools/vba/modGuide.bas).
+- LME(AA)·동적용환율(AD) 칸: 드롭다운 "사업계획 지침" 선택 시 시트 매크로가
+  사업계획지침 시트를 참조하는 수식을 넣는다 (코드: tools/vba/시트코드_매출계획.txt).
+- IX~JU열 구분 칸은 수식(ISFORMULA)으로 "지침"/"직접"을 표시한다.
 """
 import sys
 import openpyxl
@@ -138,9 +139,9 @@ for r in range(1, 11):
         if ws.cell(r, c).value is not None: ws.cell(r, c).font = f_note
 ws["B9"].font = f_title
 # 작성 안내 추가 (S6~S8)
-ws["S6"] = "* LME·동적용환율: 드롭다운에서 \"지침\" 선택 → 사업계획지침 값이 자동 입력(파란색) / 직접입력은 숫자 입력 (빈칸 = 입력 누락, 빨간색)"
+ws["S6"] = "* LME·동적용환율: 목록에서 \"사업계획 지침\" 선택 → 사업계획지침 값이 수식으로 연결(파란색) / 계약조건은 숫자 직접 입력 (빈칸 = 입력 누락, 빨간색)"
 ws["S7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
-ws["S8"] = "* 지침/직접 구분은 IX~JU열에 자동 기록됩니다 (수정 금지). 매크로 사용 통합문서(.xlsm)로 저장해야 동작합니다."
+ws["S8"] = "* 지침/직접 구분은 IX~JU열에 수식으로 자동 표시됩니다 (수정 금지)."
 for k in ("S6", "S7", "S8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
 # 월 블록 머리글 보정
 for m in range(12):
@@ -212,16 +213,18 @@ for i in range(NROWS):
         em = ex["m"][m] if ex else {}
         for k in ("W", "AA", "AD", "AG"):
             x = ws[f"{c[k]}{r}"]; x.value = em.get(k); x.font = f_in; x.protection = UNLOCK; x.fill = fill_in
+        if em.get("FL") == "지침": ws[f"{c['AA']}{r}"] = f"={G}!${L(3+m)}$11"   # 매크로가 넣는 것과 같은 수식
+        if em.get("FF") == "지침": ws[f"{c['AD']}{r}"] = f"={G}!${L(3+m)}$14"
         for k in ("U", "V"):  # 세/태선 비중: 기본 수식, 영업이 덮어쓰기 가능
             ws[f"{c[k]}{r}"].protection = UNLOCK
         fm = {"S": NUM2, "T": "#,##0.00##", "U": "0.0##%", "V": "0.0##%", "W": "General", "X": NUM2, "Y": NUM1, "Z": NUM0,
               "AA": "General", "AB": "#,##0", "AC": "#,##0", "AD": "General", "AE": "#,##0.00", "AF": NUM2, "AG": "0.0##%", "AH": NUM1}
         for k, f in fm.items(): ws[f"{c[k]}{r}"].number_format = f
-    # 구분 열 (VBA가 기록, 예시는 미리 채움)
+    # 구분 열: 수식이면 "지침", 숫자면 "직접"
     for m in range(12):
-        em = ex["m"][m] if ex else {}
-        for j, key in ((0, "FL"), (12, "FF")):
-            x = ws.cell(r, FLAG0 + 12 * (j // 12) + m, em.get(key) or None)
+        for j, k in ((0, "AA"), (12, "AD")):
+            cl = mc(m, k)
+            x = ws.cell(r, FLAG0 + j + m, f'=IF({cl}{r}="","",IF(_xlfn.ISFORMULA({cl}{r}),"지침","직접"))')
             x.font = f_base; x.alignment = Alignment(horizontal="center"); x.border = bd; x.fill = fill_calc
     # 연간 (HC~HO)
     col = lambda k: [f"{mc(m,k)}{r}" for m in range(12)]
@@ -260,12 +263,11 @@ red = PatternFill("solid", fgColor="F8CBAD"); blue = PatternFill("solid", fgColo
 for m in range(12):
     for j, (k, nm) in enumerate((("AA", "LME"), ("AD", "동적용환율"))):
         cl = mc(m, k); rng = f"{cl}{R1}:{cl}{RE}"; fl = L(FLAG0 + 12 * j + m)
-        dv = DataValidation(type="list", formula1='"지침"', allow_blank=True, showErrorMessage=False,
-                            showInputMessage=True, promptTitle=nm, prompt='목록에서 "지침" 선택 또는 숫자 직접 입력')
+        dv = DataValidation(type="list", formula1='"사업계획 지침"', allow_blank=True, showErrorMessage=False,
+                            showInputMessage=True, promptTitle=nm, prompt='목록에서 "사업계획 지침" 선택 또는 숫자 직접 입력')
         ws.add_data_validation(dv); dv.add(rng)
         ws.conditional_formatting.add(rng, FormulaRule(formula=[f'AND({cl}{R1}="",N({mc(m,"W")}{R1})<>0)'], fill=red, stopIfTrue=True))
-        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'${fl}{R1}="지침"'], fill=blue, stopIfTrue=True))
-        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'AND({cl}{R1}<>"",${fl}{R1}="")'], fill=orange))
+        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'${fl}{R1}="지침"'], fill=blue, font=Font(color="0070C0", bold=True), stopIfTrue=True))
 ws.conditional_formatting.add(f"N{R1}:R{RE}", FormulaRule(formula=[f"ISNA(N{R1})"], fill=red))
 
 # ---- 하단 소계 (원본 34~55행 구조)
@@ -330,31 +332,30 @@ ws.protection.sort = False
 ws.auto_filter.ref = f"B14:{L(FLAGE)}{RE}"
 ws.sheet_properties.tabColor = "1F3864"
 g.sheet_properties.tabColor = "FFC000"
-# ---- VBA 설치 안내 시트
-h = wb.create_sheet("VBA설치안내")
-h.column_dimensions["A"].width = 2; h.column_dimensions["B"].width = 110
+# ---- 매크로 안내 시트
+h = wb.create_sheet("매크로안내")
+h.column_dimensions["A"].width = 2; h.column_dimensions["B"].width = 115
 lines = [
- ("VBA 설치 안내 (최초 1회)", f_title),
- ("1. 이 파일을 '다른 이름으로 저장' → 파일 형식 'Excel 매크로 사용 통합 문서 (*.xlsm)'으로 저장합니다.", f_base),
- ("2. Alt + F11 (VBA 편집기) → 메뉴 [파일] → [파일 가져오기] → modGuide.bas 선택", f_base),
- ("3. 왼쪽 프로젝트 창에서 'ThisWorkbook' 더블클릭 → ThisWorkbook.txt 내용을 그대로 붙여넣기", f_base),
- ("4. 저장 후 파일을 닫았다가 다시 열기 (매크로 사용 허용) → 준비 완료", f_base),
+ ("매크로 넣기 (기존 양식과 같은 방식 · 최초 1회)", f_title),
+ ("1. '27년 매출월별상세' 시트 탭에서 마우스 오른쪽 → [코드 보기]", f_base),
+ ("2. 열린 코드 창의 기존 내용을 모두 지우고, '시트코드_매출계획.txt' 내용을 그대로 붙여넣기", f_base),
+ ("3. 'Excel 매크로 사용 통합 문서(*.xlsm)'로 저장 → 이 파일을 영업팀에 배포 (영업팀은 열 때 '콘텐츠 사용'만 누르면 됨)", f_base),
  ("", f_base),
  ("사용 방법", f_title),
- ("• LME·동적용환율 칸: 목록(▼)에서 \"지침\" 선택 → 사업계획지침 시트의 해당 월 값이 숫자로 입력되고 파란색으로 표시됩니다.", f_base),
- ("• 직접 입력: 숫자를 입력하면 '직접'으로 기록됩니다. 구분은 IX~JU열에 자동 기록됩니다 (수정 금지).", f_base),
- ("• 여러 칸을 한 번에 지침으로: 칸 선택 → Alt + F8 → '선택칸_지침적용' 실행", f_base),
- ("• 사업계획지침 시트의 LME·환율을 바꾸면 '지침' 칸이 자동으로 새 값으로 바뀝니다. (수동: Alt + F8 → '지침값_전체갱신')", f_base),
- ("• 색상: 파란색 = 지침 / 빨간색 = 매출이 있는데 빈칸 / 주황색 = 값은 있는데 구분이 없음(매크로 미실행 상태에서 입력)", f_base),
+ ("• LME·동적용환율 칸 목록(▼)에서 \"사업계획 지침\" 선택 → 사업계획지침 시트 해당 월 값을 참조하는 수식이 들어가고 파란색으로 표시됩니다.", f_base),
+ ("• 계약조건(직접 입력): 숫자를 입력합니다. \"지침\" 또는 \"사업계획 지침\"을 직접 타이핑해도 됩니다.", f_base),
+ ("• 사업계획지침 시트 값을 바꾸면 '지침' 칸은 수식이라 자동으로 바뀝니다 (별도 실행 불필요).", f_base),
+ ("• 지침 칸을 다른 달로 복사해도 매크로가 해당 월 지침으로 자동 보정합니다.", f_base),
+ ("• IX~JU열은 수식으로 '지침'(수식 칸) / '직접'(숫자 칸)을 표시합니다. 1단계 HTML이 이 열을 읽습니다.", f_base),
+ ("• 색상: 파란색 = 지침 / 빨간색 = 매출이 있는데 빈칸", f_base),
  ("", f_base),
  ("열을 삽입·이동했을 때", f_title),
- ("• VBA는 머리글 글자로 열을 찾으므로 보통은 수정이 필요 없습니다. 열을 바꾼 뒤 Alt + F8 → '열위치_다시찾기'를 실행해 결과를 확인하세요.", f_base),
- ("• 다음을 바꾸면 modGuide 모듈 맨 위 [설정] 부분만 고치면 됩니다:", f_base),
- ("     - 시트 이름 → SALES_SHEET / GUIDE_SHEET", f_base),
- ("     - 머리글 행 위치(월: 12행, 항목: 14행) 또는 데이터 시작 행(15행) → ROW_MONTH / ROW_ITEM / ROW_FIRST", f_base),
- ("     - LME·동적용환율 머리글 글자(\"*LME\", \"*동적용환율\"로 시작) → HDR_LME / HDR_FX", f_base),
- ("     - 사업계획지침 시트의 월별 LME 행(11)·환율 행(14)·1월 열(C) → G_ROW_LME / G_ROW_FX / G_COL_JAN", f_base),
- ("• 단, 1단계 HTML은 원본 열 위치(S열 = 1월 동량, 월 16열, 구분 열 IX~JU) 기준입니다. 열을 바꾸면 HTML 상단 열 위치 설정도 함께 바꿔야 합니다.", f_base),
+ ("• 매크로는 12행 월 머리글(\"1월\"~\"12월\")과 14행 항목 머리글(\"*LME\"·\"*동적용환율\"로 시작)로 열을 찾으므로, 머리글 글자를 유지하면 수정이 필요 없습니다.", f_base),
+ ("• 이미 들어 있는 지침 수식과 IX~JU 구분 수식은 엑셀이 열 삽입에 맞춰 자동으로 조정합니다.", f_base),
+ ("• 다음을 바꾸면 시트 코드 맨 위 [설정] 부분만 고칩니다:", f_base),
+ ("     - 지침 시트 이름 → GUIDE_SHEET   /   머리글 행(12·14행), 데이터 시작 행(15행) → ROW_MONTH · ROW_ITEM · ROW_FIRST", f_base),
+ ("     - 머리글 시작 글자 → HDR_LME · HDR_FX   /   지침 시트의 LME 행(11)·환율 행(14)·1월 열(C=3) → G_ROW_LME · G_ROW_FX · G_COL_JAN", f_base),
+ ("• 1단계 HTML은 원본 열 위치(S열 = 1월 동량, 월 16열, 구분 열 IX~JU) 기준입니다. 열을 바꾸면 HTML 상단 열 위치 설정도 함께 바꿔야 합니다.", f_base),
 ]
 for i, (t, f) in enumerate(lines):
     h.cell(2 + i, 2, t).font = f

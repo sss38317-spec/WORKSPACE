@@ -1,8 +1,0 @@
-' ===== ThisWorkbook 개체에 붙여넣기 =====
-Private Sub Workbook_Open()
-    modGuide.InitGuide
-End Sub
-
-Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
-    modGuide.OnChange Sh, Target
-End Sub
