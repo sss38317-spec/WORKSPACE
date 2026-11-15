@@ -1,8 +1,9 @@
-"""0단계: 영업팀 매출계획 양식 (VBA 없이 '지침' 입력 방식) 생성.
+"""0단계: 영업팀 매출계획 양식 생성 (원본 열 구조 유지 + VBA 지침 선택).
 
 사용: python build_sales_template.py <원본 예시양식.xlsx> <출력.xlsx>
 - 원본에서 머리글(1~14행), 예시 데이터(15~30행), 동량지수 시트를 가져온다.
-- LME(AA)·동적용환율(AD) 칸은 숫자 또는 "지침"만 허용.
+- LME(AA)·동적용환율(AD) 칸: 드롭다운 "지침" 선택 시 VBA가 지침 값(숫자)을 넣고,
+  IX~JU열 구분 칸에 "지침"/"직접"을 기록한다 (VBA: tools/vba/modGuide.bas).
 """
 import sys
 import openpyxl
@@ -40,12 +41,13 @@ PCT = '0.0%;(0.0%);"-"'
 
 R1, NROWS = 15, 200            # 데이터 15행 ~ 214행
 RE = R1 + NROWS - 1
-ADJ = CI("S")                  # 동량지수 조정률(예외) — 1월 동량 바로 앞
-M0, MW = CI("T"), 16           # 1월 시작열(T), 월 블록 폭
-Y0 = M0 + 12 * MW              # 연간 시작 HD
-SRC_M0 = CI("S")               # 원본 양식의 1월 시작열
-LASTC = Y0 + 45                # 마지막 열 (해외운송비 차이 IW)
-SHIFT = lambda c: c + 1 if c >= SRC_M0 else c   # 원본 열 → 새 열
+M0, MW = CI("S"), 16           # 1월 시작열(S), 월 블록 폭 (원본과 동일)
+Y0 = M0 + 12 * MW              # 연간 시작 HC
+SRC_M0 = CI("S")
+LASTC = Y0 + 45                # IV
+FLAG0 = CI("IX")               # 구분 열: IX~JI = LME구분 1~12월, JJ~JU = 환율구분 1~12월
+FLAGE = FLAG0 + 23
+SHIFT = lambda c: c
 OFF = dict(S=0, T=1, U=2, V=3, W=4, X=5, Y=6, Z=7, AA=8, AB=9, AC=10, AD=11, AE=12, AF=13, AG=14, AH=15)
 def mc(m, k): return L(M0 + m * MW + OFF[k])
 
@@ -136,20 +138,26 @@ for r in range(1, 11):
         if ws.cell(r, c).value is not None: ws.cell(r, c).font = f_note
 ws["B9"].font = f_title
 # 작성 안내 추가 (S6~S8)
-ws["T6"] = "* LME·동적용환율: 숫자(직접입력) 또는 \"지침\" 입력 → \"지침\"이면 사업계획지침 시트 값 자동 적용 (빈칸 = 입력 누락, 빨간색)"
-ws["T7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
-ws["T8"] = "* S열 '동량지수 조정률(예외)': 일부 거래선만 동량지수(톤당단가)를 낮출 때 입력 (예: 3.4%) → 12개월 전체에 적용"
-for k in ("T6", "T7", "T8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
+ws["S6"] = "* LME·동적용환율: 드롭다운에서 \"지침\" 선택 → 사업계획지침 값이 자동 입력(파란색) / 직접입력은 숫자 입력 (빈칸 = 입력 누락, 빨간색)"
+ws["S7"] = "* 동프리미엄·사업계획환율은 사업계획지침 시트에서 일괄 적용 (입력 불필요)"
+ws["S8"] = "* 지침/직접 구분은 IX~JU열에 자동 기록됩니다 (수정 금지). 매크로 사용 통합문서(.xlsm)로 저장해야 동작합니다."
+for k in ("S6", "S7", "S8"): ws[k].font = Font(name=FONT, size=9, bold=True, color="C00000")
 # 월 블록 머리글 보정
 for m in range(12):
-    ws[f"{mc(m,'AA')}14"] = "*LME\n(숫자 또는 \"지침\")"
-    ws[f"{mc(m,'AD')}14"] = "*동적용환율\n(숫자 또는 \"지침\")"
+    ws[f"{mc(m,'AA')}14"] = "*LME\n(지침 선택 또는 입력)"
+    ws[f"{mc(m,'AD')}14"] = "*동적용환율\n(지침 선택 또는 입력)"
     ws[f"{mc(m,'AB')}14"] = "동프리미엄\n(지침 일괄)"
     ws[f"{mc(m,'AE')}14"] = "사업계획환율\n(지침 일괄)"
-ws[f"{L(ADJ)}12"] = "동량지수 조정률\n(예외)"; ws[f"{L(ADJ)}13"] = "%"; ws[f"{L(ADJ)}14"] = "일부 거래선만\n입력 (예: 3.4%)"
+ws.merge_cells(start_row=12, end_row=12, start_column=FLAG0, end_column=FLAGE)
+ws.cell(12, FLAG0, "지침/직접 구분 (VBA 자동 기록 · 수정 금지)")
+ws.merge_cells(start_row=13, end_row=13, start_column=FLAG0, end_column=FLAG0 + 11); ws.cell(13, FLAG0, "LME")
+ws.merge_cells(start_row=13, end_row=13, start_column=FLAG0 + 12, end_column=FLAGE); ws.cell(13, FLAG0 + 12, "동적용환율")
+for m in range(12):
+    ws.cell(14, FLAG0 + m, f"LME구분_{m+1}월"); ws.cell(14, FLAG0 + 12 + m, f"환율구분_{m+1}월")
 for r in (12, 13, 14):
-    x = ws.cell(r, ADJ); x.font = f_b; x.alignment = wrap; x.border = bd; x.fill = fill_hd
-ws.column_dimensions[L(ADJ)].width = 12
+    for c in range(FLAG0, FLAGE + 1):
+        x = ws.cell(r, c); x.font = f_b; x.alignment = wrap; x.border = bd; x.fill = PatternFill("solid", fgColor="BFBFBF")
+for c in range(FLAG0, FLAGE + 1): ws.column_dimensions[L(c)].width = 7.5
 # HQ~IV 머리글 (원본 값 유지됨) + 스타일
 for r in range(12, 15):
     for c in range(Y0 + 13, LASTC + 1):
@@ -161,16 +169,18 @@ example = []
 for r in range(15, 31):
     if s_main.cell(r, 2).value is None: continue
     t = str(s_main.cell(r, CI("T")).value or "")
-    adj = 0.034 if "3.4%" in t else None
+    adj = 0.034 if "3.4%" in t else None   # 원본처럼 수식에 직접 반영된 예외
     d = {"base": [s_main.cell(r, c).value for c in range(2, 14)], "adj": adj, "m": []}
     for m in range(12):
         def v(k): return s_main.cell(r, SRC_M0 + m * MW + OFF[k]).value
         lme, fx = v("AA"), v("AD")
-        d["m"].append(dict(W=v("W"), AA=("지침" if lme == 14500 else lme), AD=("지침" if fx == 1360 else fx), AG=v("AG")))
+        d["m"].append(dict(W=v("W"), AA=lme, AD=fx, AG=v("AG"),
+                           FL=("" if lme in (None, "") else ("지침" if lme == 14500 else "직접")),
+                           FF=("" if fx in (None, "") else ("지침" if fx == 1360 else "직접"))))
     example.append(d)
 
 def eff(col, r, gref):
-    return f'IF({col}{r}="지침",{gref},N({col}{r}))'
+    return f"N({col}{r})"
 
 for i in range(NROWS):
     r = R1 + i
@@ -188,7 +198,7 @@ for i in range(NROWS):
         c = {k: mc(m, k) for k in OFF}
         lme, fx = eff(c["AA"], r, g_lme(m)), eff(c["AD"], r, g_fx(m))
         ws[f"{c['S']}{r}"] = f"=IFERROR(ROUND({c['W']}{r}/{c['T']}{r},2),0)"
-        ws[f"{c['T']}{r}"] = f"=IF($E{r}=\"\",0,(($O{r}*{c['U']}{r}+$Q{r}*{c['V']}{r})+{c['X']}{r})*(1-N(${L(ADJ)}{r})))"
+        ws[f"{c['T']}{r}"] = f"=IF($E{r}=\"\",0,(($O{r}*{c['U']}{r}+$Q{r}*{c['V']}{r})+{c['X']}{r})" + (f"*(1-{ex['adj']*100:g}%)" if ex and ex["adj"] else "") + ")"
         ws[f"{c['U']}{r}"] = f"=$N{r}"
         ws[f"{c['V']}{r}"] = f"=$P{r}"
         ws[f"{c['X']}{r}"] = f"=ROUNDDOWN(IF({c['AA']}{r}=\"\",0,({lme}-N($R{r}))*{fx}/1000000),2)"
@@ -204,15 +214,19 @@ for i in range(NROWS):
             x = ws[f"{c[k]}{r}"]; x.value = em.get(k); x.font = f_in; x.protection = UNLOCK; x.fill = fill_in
         for k in ("U", "V"):  # 세/태선 비중: 기본 수식, 영업이 덮어쓰기 가능
             ws[f"{c[k]}{r}"].protection = UNLOCK
-        fm = {"S": NUM2, "T": NUM2, "U": "0.0##%", "V": "0.0##%", "W": "General", "X": NUM2, "Y": NUM1, "Z": NUM0,
+        fm = {"S": NUM2, "T": "#,##0.00##", "U": "0.0##%", "V": "0.0##%", "W": "General", "X": NUM2, "Y": NUM1, "Z": NUM0,
               "AA": "General", "AB": "#,##0", "AC": "#,##0", "AD": "General", "AE": "#,##0.00", "AF": NUM2, "AG": "0.0##%", "AH": NUM1}
         for k, f in fm.items(): ws[f"{c[k]}{r}"].number_format = f
-    # 조정률
-    x = ws.cell(r, ADJ, ex["adj"] if ex else None); x.font = f_in; x.protection = UNLOCK; x.fill = fill_in; x.number_format = "0.0##%"
+    # 구분 열 (VBA가 기록, 예시는 미리 채움)
+    for m in range(12):
+        em = ex["m"][m] if ex else {}
+        for j, key in ((0, "FL"), (12, "FF")):
+            x = ws.cell(r, FLAG0 + 12 * (j // 12) + m, em.get(key) or None)
+            x.font = f_base; x.alignment = Alignment(horizontal="center"); x.border = bd; x.fill = fill_calc
     # 연간 (HC~HO)
     col = lambda k: [f"{mc(m,k)}{r}" for m in range(12)]
     S_, W_, Y_, Z_, AB_, AF_, AH_ = (col(k) for k in ("S", "W", "Y", "Z", "AB", "AF", "AH"))
-    lme_terms = [f"{mc(m,'S')}{r}*IF({mc(m,'AA')}{r}=\"지침\",{g_lme(m)},N({mc(m,'AA')}{r}))" for m in range(12)]
+    lme_terms = [f"{mc(m,'S')}{r}*N({mc(m,'AA')}{r})" for m in range(12)]
     a = lambda k: f"{L(Y0 + k)}{r}"
     ws[a(0)] = "=" + "+".join(S_)
     ws[a(1)] = f"=IFERROR({a(2)}/{a(0)},0)"
@@ -242,17 +256,16 @@ for i in range(NROWS):
         if x.font != f_in: x.font = f_base
 
 # ---- 데이터 유효성 검사 / 조건부 서식 (LME·동적용환율)
-red = PatternFill("solid", fgColor="F8CBAD"); blue = PatternFill("solid", fgColor="DDEBF7")
+red = PatternFill("solid", fgColor="F8CBAD"); blue = PatternFill("solid", fgColor="DDEBF7"); orange = PatternFill("solid", fgColor="FCE4D6")
 for m in range(12):
-    for k, nm in (("AA", "LME"), ("AD", "동적용환율")):
-        cl = mc(m, k); rng = f"{cl}{R1}:{cl}{RE}"
-        dv = DataValidation(type="custom", formula1=f'OR({cl}{R1}="지침",AND(ISNUMBER({cl}{R1}),{cl}{R1}>0))',
-                            allow_blank=True, showErrorMessage=True, showInputMessage=True,
-                            errorTitle="입력 오류", error=f'{nm}은 숫자 또는 "지침"만 입력할 수 있습니다.',
-                            promptTitle=nm, prompt='숫자(직접입력) 또는 "지침" 입력')
+    for j, (k, nm) in enumerate((("AA", "LME"), ("AD", "동적용환율"))):
+        cl = mc(m, k); rng = f"{cl}{R1}:{cl}{RE}"; fl = L(FLAG0 + 12 * j + m)
+        dv = DataValidation(type="list", formula1='"지침"', allow_blank=True, showErrorMessage=False,
+                            showInputMessage=True, promptTitle=nm, prompt='목록에서 "지침" 선택 또는 숫자 직접 입력')
         ws.add_data_validation(dv); dv.add(rng)
-        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'AND({cl}{R1}="",N({mc(m,"W")}{R1})<>0)'], fill=red))
-        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'{cl}{R1}="지침"'], fill=blue, font=Font(color="1F4E79", bold=True)))
+        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'AND({cl}{R1}="",N({mc(m,"W")}{R1})<>0)'], fill=red, stopIfTrue=True))
+        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'${fl}{R1}="지침"'], fill=blue, stopIfTrue=True))
+        ws.conditional_formatting.add(rng, FormulaRule(formula=[f'AND({cl}{R1}<>"",${fl}{R1}="")'], fill=orange))
 ws.conditional_formatting.add(f"N{R1}:R{RE}", FormulaRule(formula=[f"ISNA(N{R1})"], fill=red))
 
 # ---- 하단 소계 (원본 34~55행 구조)
@@ -314,9 +327,39 @@ ws.protection.formatColumns = False
 ws.protection.formatRows = False
 ws.protection.autoFilter = False
 ws.protection.sort = False
-ws.auto_filter.ref = f"B14:{L(LASTC)}{RE}"
+ws.auto_filter.ref = f"B14:{L(FLAGE)}{RE}"
 ws.sheet_properties.tabColor = "1F3864"
 g.sheet_properties.tabColor = "FFC000"
+# ---- VBA 설치 안내 시트
+h = wb.create_sheet("VBA설치안내")
+h.column_dimensions["A"].width = 2; h.column_dimensions["B"].width = 110
+lines = [
+ ("VBA 설치 안내 (최초 1회)", f_title),
+ ("1. 이 파일을 '다른 이름으로 저장' → 파일 형식 'Excel 매크로 사용 통합 문서 (*.xlsm)'으로 저장합니다.", f_base),
+ ("2. Alt + F11 (VBA 편집기) → 메뉴 [파일] → [파일 가져오기] → modGuide.bas 선택", f_base),
+ ("3. 왼쪽 프로젝트 창에서 'ThisWorkbook' 더블클릭 → ThisWorkbook.txt 내용을 그대로 붙여넣기", f_base),
+ ("4. 저장 후 파일을 닫았다가 다시 열기 (매크로 사용 허용) → 준비 완료", f_base),
+ ("", f_base),
+ ("사용 방법", f_title),
+ ("• LME·동적용환율 칸: 목록(▼)에서 \"지침\" 선택 → 사업계획지침 시트의 해당 월 값이 숫자로 입력되고 파란색으로 표시됩니다.", f_base),
+ ("• 직접 입력: 숫자를 입력하면 '직접'으로 기록됩니다. 구분은 IX~JU열에 자동 기록됩니다 (수정 금지).", f_base),
+ ("• 여러 칸을 한 번에 지침으로: 칸 선택 → Alt + F8 → '선택칸_지침적용' 실행", f_base),
+ ("• 사업계획지침 시트의 LME·환율을 바꾸면 '지침' 칸이 자동으로 새 값으로 바뀝니다. (수동: Alt + F8 → '지침값_전체갱신')", f_base),
+ ("• 색상: 파란색 = 지침 / 빨간색 = 매출이 있는데 빈칸 / 주황색 = 값은 있는데 구분이 없음(매크로 미실행 상태에서 입력)", f_base),
+ ("", f_base),
+ ("열을 삽입·이동했을 때", f_title),
+ ("• VBA는 머리글 글자로 열을 찾으므로 보통은 수정이 필요 없습니다. 열을 바꾼 뒤 Alt + F8 → '열위치_다시찾기'를 실행해 결과를 확인하세요.", f_base),
+ ("• 다음을 바꾸면 modGuide 모듈 맨 위 [설정] 부분만 고치면 됩니다:", f_base),
+ ("     - 시트 이름 → SALES_SHEET / GUIDE_SHEET", f_base),
+ ("     - 머리글 행 위치(월: 12행, 항목: 14행) 또는 데이터 시작 행(15행) → ROW_MONTH / ROW_ITEM / ROW_FIRST", f_base),
+ ("     - LME·동적용환율 머리글 글자(\"*LME\", \"*동적용환율\"로 시작) → HDR_LME / HDR_FX", f_base),
+ ("     - 사업계획지침 시트의 월별 LME 행(11)·환율 행(14)·1월 열(C) → G_ROW_LME / G_ROW_FX / G_COL_JAN", f_base),
+ ("• 단, 1단계 HTML은 원본 열 위치(S열 = 1월 동량, 월 16열, 구분 열 IX~JU) 기준입니다. 열을 바꾸면 HTML 상단 열 위치 설정도 함께 바꿔야 합니다.", f_base),
+]
+for i, (t, f) in enumerate(lines):
+    h.cell(2 + i, 2, t).font = f
+    h.cell(2 + i, 2).alignment = Alignment(wrap_text=True, vertical="top")
+h.sheet_properties.tabColor = "70AD47"
 wb.active = 0
 wb.save(OUT)
 print("saved", OUT, "example rows", len(example))
