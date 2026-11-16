@@ -131,7 +131,7 @@ function buildWorkbook(){
     D.set(r,1,rw.row.excelRow,TX); FRONT.forEach((f,j)=>{const v=c[COL[f[0]]];const nv=parseNum(v);D.set(r,2+j,(nv!=null&&!isNaN(nv)&&j>=8)?nv:norm(v),j>=8?NUM(j>=12&&j<=15?"n3":"n2"):TX);});
     D.set(r,cS,rw.cf?rw.cf.s:"",NUM("n3",{fill:"inp"}));D.set(r,cT,rw.cf?rw.cf.t:"",NUM("n3",{fill:"inp"}));
     D.set(r,cU,rw.rat||0,NUM("pct"),`SUMIFS(${PB}!$C:$C,${PB}!$A:$A,$D${r},${PB}!$B:$B,"상품재료비율")`);
-    D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3"),`SUMIFS(${PB}!$C:$C,${PB}!$A:$A,$D${r},${PB}!$B:$B,"포장비단가")`);
+    D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3",{fill:"inp"}));
     rw.mon.forEach((x,m)=>{const ref=k=>C(mc(m,k))+r, pc=`${PB}!${C(3+m)}:${C(3+m)}`, crit=t=>`${PB}!$A:$A,$D${r},${PB}!$B:$B,"${t}"`;
       D.set(r,mc(m,"동량"),x.q,NUM("n2",{fill:"inp"}));D.set(r,mc(m,"매출액"),x.a,NUM("n1",{fill:"inp"}));
       D.set(r,mc(m,"세선비중"),x.tw,NUM("pct",{fill:"inp"}));D.set(r,mc(m,"태선비중"),x.th,NUM("pct",{fill:"inp"}));
@@ -166,10 +166,9 @@ function buildWorkbook(){
       MONTHS.forEach((_,m)=>PBs.set(r,3+m,fn(m),NUM(fmt,ff?{}:{fill:"inp"}),ff?ff(m):null));
       PBs.set(r,15,sumA(MONTHS.map((_,m)=>fn(m))),NUM(fmt,{fill:"sub"}),`SUM(C${r}:N${r})`);});
     PBs.set(pr+4,1,g,TX);PBs.set(pr+4,2,"상품재료비율",TX);PBs.set(pr+4,3,ratM[gk]==null?"":ratM[gk],NUM("pct",{fill:"inp"}));
-    const pkM=RT&&!RT.error?RT.pk:{};PBs.set(pr+5,1,g,TX);PBs.set(pr+5,2,"포장비단가",TX);PBs.set(pr+5,3,pkM[gk]==null?"":pkM[gk],NUM("n3",{fill:"inp"}));
-    pr+=7;});
+    pr+=6;});
   PBs.cols={1:10,2:14};for(let c=3;c<=15;c++)PBs.cols[c]=10;PBs.freeze=[4,3];
-  PBs.set(pr,1,"※ 매출 동량·금액 = 상세 시트 SUMIF(수식), OEM 동량·금액 = 생산계획 생산/OEM(입력값), 상품재료비율·포장비단가 = 재료비 기준(입력값)",NOTE);
+  PBs.set(pr,1,"※ 매출 동량·금액 = 상세 시트 SUMIF(수식), OEM 동량·금액 = 생산계획 생산/OEM(입력값), 상품재료비율 = 재료비 기준(입력값) / 포장비 계수는 상세 시트 포장비단가 열(입력값)",NOTE);
   // ---------- 4) 보고양식 (SUMIFS 수식) ----------
   const Rp=XLSX_W.Sheet("보고양식"); const rep=buildReport(R);
   Rp.set(1,1,"연간 매출 / 재료비 TOTAL"+(state.verName?" – "+state.verName:""),T); Rp.set(2,1,"(단위: 금액·재료비 백만원 / 동량 톤 / 톤당단가 백만원/톤)",NOTE);

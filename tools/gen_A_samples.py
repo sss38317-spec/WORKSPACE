@@ -76,22 +76,24 @@ bas[-2][2]="매입동가"
 bas.insert(len(bas)-2, br("","환율","원/$",fx))
 # ---- 상품재료비율
 RAT={'상선용':0.85,'해양용':0.80,'이동용':0.78,'전력용':0.82}
-PACK={'상선용':0.35,'해양용':0.40,'이동용':0.30,'전력용':0.50}
-rat=[["","제품군","상품재료비율","포장비단가 (백만원/톤)","산출 기준 (예: 26년 1~10월 실적)","비고"]]+[["",k,f"{v*100:.1f}%",PACK[k],"예시",""] for k,v in RAT.items()]
-# ---- 동량지수_부재료비 (기준양식 시트 10~ 행)
-wb=openpyxl.load_workbook('/home/user/WORKSPACE/재료비_기준양식.xlsx',data_only=False)
-ix=wb['동량지수_부재료비']
+PACKW=0.303   # 포장비 계수 (백만원/톤) – 사용자 기준양식처럼 전 행 일괄값
+# 상품재료비율 (사용자 수정 양식: 3행 머리글, 4행 매출액·재료비 보조 머리글, 5행부터 값)
+rat=[["","제품군","상품재료비율","산출 기준 (예: 26년 1~10월 실적)","","비고"],["","","","매출액","재료비",""]]+[["",k,v,"","",""] for k,v in RAT.items()]
+# ---- 동량지수_부재료비 (사용자 수정 양식: B~R 영업 동량지수 구조, T~V 부재료비 계수, W 포장비 계수)
+ix=openpyxl.load_workbook(f'{S}/src/sales.xlsx',data_only=False)['동량지수_1~9월 매출품목']
 COEF={'JIS':(4.2,2.6),'XLPE':(3.9,2.4),'NEK':(4.5,2.9),'TYPE P':(4.0,2.5),'MIL':(5.0,3.0)}
 coef=[]
 for r in range(10,ix.max_row+1):
     row=[]
-    for c in range(1,23):
-        v=ix.cell(r,c).value
+    for c in range(1,24):
+        v=ix.cell(r,c).value if c<=18 else None
         if c==2 and r>=12: v=f"{ix.cell(r,3).value}{ix.cell(r,4).value}{ix.cell(r,5).value}{ix.cell(r,6).value}" if ix.cell(r,3).value else ""
         if isinstance(v,str) and v.startswith("=+"): v=ix[f"{v[2]}{int(v[3:])}"].value if r>=12 else v
         row.append("" if v is None else v)
+    if r==10: row[19]="부재료비 계수 (백만원/톤)"; row[22]="포장비 계수"
+    if r==11: row[19]="TOTAL"; row[20]="세선"; row[21]="태선"
     if r>=12 and ix.cell(r,3).value:
-        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0,2.5)); row[20]=cs; row[21]=ct
+        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0,2.5)); row[20]=cs; row[21]=ct; row[19]=round((cs+ct)/2,3); row[22]=PACKW
     if any(str(x).strip() for x in row): coef.append(row)
 def coefOf(g,det,cust,cur):
     for row in coef[2:]:
@@ -107,7 +109,7 @@ for d in sales:
         q,a=d['q'][m],d['a'][m]; g=d['g']
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
-        pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACK[g]
+        pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACKW
         cu=pq*apply[m]/1000; sub=pq*unit+oa*RAT[g]
         tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=oa*RAT[g]
 tsv=lambda rr: "\n".join("\t".join(('"'+str(x).replace('"','""')+'"') if any(ch in str(x) for ch in '\t\n"') else str(x) for x in r) for r in rr)

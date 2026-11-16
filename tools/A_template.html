@@ -102,17 +102,17 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
     </div>
     <div class="card">
       <h2>3. 재료비 기준 · 재료비동가 <span class="st" id="st-basis"></span></h2>
-      <p class="help">재료비_기준양식 '재료비동가' 시트 <b>2행(목표 프리미엄)부터 적용동가 행까지, A~S열</b>. 항목 이름으로 행을 찾습니다.</p>
+      <p class="help">재료비_기준양식 '재료비동가' 시트 <b>2행(목표 프리미엄)부터 적용동가 행(24행)까지, A~T열</b>. 항목 이름으로 행을 찾습니다 (누계/월평균 열은 사용하지 않음).</p>
       <textarea id="in-basis" placeholder="여기에 붙여넣기 (Ctrl+V)"></textarea>
       <div class="muted" id="info-basis"></div>
     </div>
     <div class="card">
-      <h2>4. 재료비 기준 · 상품재료비율 · 포장비단가 <span class="st" id="st-ratio"></span></h2>
-      <p class="help">'상품재료비율' 시트 <b>3행(머리글)부터, A~F열</b>. 제품군별 상품재료비율·포장비단가(백만원/톤).</p>
+      <h2>4. 재료비 기준 · 상품재료비율 <span class="st" id="st-ratio"></span></h2>
+      <p class="help">'상품재료비율' 시트 <b>3행(머리글)부터, A~F열</b>. 제품군별 상품재료비율 (C열).</p>
       <textarea id="in-ratio" placeholder="여기에 붙여넣기 (Ctrl+V)" style="height:90px"></textarea>
       <div class="muted" id="info-ratio"></div>
       <h2 style="margin-top:12px">5. 재료비 기준 · 동량지수_부재료비 <span class="st" id="st-coef"></span></h2>
-      <p class="help">'동량지수_부재료비' 시트 <b>10행(머리글)부터 마지막 행까지, A~V열</b>. 키 = 제품군+상세+거래선+통화, U·V열 = 세선·태선 부재료비 계수.</p>
+      <p class="help">'동량지수_부재료비' 시트 <b>10행(머리글)부터 총계 행까지, A~W열</b>. 키 = 제품군+상세+거래선+통화, U·V열 = 세선·태선 부재료비 계수, W열 = 포장비 계수 (모두 백만원/톤).</p>
       <textarea id="in-coef" placeholder="여기에 붙여넣기 (Ctrl+V)" style="height:90px"></textarea>
       <div class="muted" id="info-coef"></div>
     </div>
@@ -122,7 +122,7 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 <section class="tab" id="t-cu">
   <div class="card">
     <h2>적용동가 계산 (26년 11월 ~ 27년 12월)</h2>
-    <p class="help">제품 총동량 = 생산계획 생산/자체 합계(없으면 재료비동가 시트 값). 매입동가 = (평균 LME + 목표 프리미엄) × 환율 ÷ 1,000, 적용동가 = 전월 매입동가.</p>
+    <p class="help">제품 총동량 = 생산계획 생산/자체 합계 (그 달 생산계획이 비어 있으면 재료비동가 시트 값). 매입동가 = (평균 LME + 목표 프리미엄) × 환율 ÷ 1,000, 적용동가 = 전월 매입동가.</p>
     <div class="scroll"><table id="cuTable"></table></div>
   </div>
 </section>
@@ -167,15 +167,15 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
   <div class="card"><h2>A단계 계산 규칙</h2><div class="scroll"><table>
     <tr><th>항목</th><th>산식</th></tr>
     <tr><td>대상</td><td>영업 매출계획 중 사업부 = 선박선 (광통신 제외). 동량·매출액은 영업 파일 값 그대로</td></tr>
-    <tr><td>제품 총동량 (월)</td><td>생산계획 생산/자체 동량 합계 (사업장·제품군 합산)</td></tr>
+    <tr><td>제품 총동량 (월)</td><td>생산계획 생산/자체 동량 합계 (사업장·제품군 합산). 그 달 생산계획이 비어 있으면 재료비동가 시트 제품 총동량</td></tr>
     <tr><td>비선물 동량</td><td>제품 총동량 − SCR 선물잔량 − JCR 선물잔량</td></tr>
     <tr><td>평균 LME</td><td>(SCR량×SCR LME + JCR량×JCR LME + 비선물량×비선물 LME) ÷ 제품 총동량</td></tr>
     <tr><td>매입동가 (원/kg)</td><td>(평균 LME + 목표 프리미엄) × 환율 ÷ 1,000</td></tr>
     <tr><td>적용동가</td><td>전월 매입동가 (27년 1월 = 26년 12월 매입동가)</td></tr>
     <tr><td>상품 동량 / 금액</td><td>제품군 OEM 동량 × (거래처 동량 ÷ 제품군 동량) / 제품군 OEM 금액 × (거래처 매출 ÷ 제품군 매출)</td></tr>
     <tr><td>제품 동량 / 금액</td><td>거래처 전체 − 상품</td></tr>
-    <tr><td>포장비 단가 (백만원/톤)</td><td>제품군별 일괄 단가 (재료비 기준 · 상품재료비율 시트 포장비단가 열). 제품에만 적용</td></tr>
-    <tr><td>부재료비 단가 (백만원/톤)</td><td>세선비중 × 세선 계수 + 태선비중 × 태선 계수 (계수: 동량지수_부재료비 U·V열, 키 = 제품군+상세+거래선+통화)</td></tr>
+    <tr><td>포장비 단가 (백만원/톤)</td><td>동량지수_부재료비 시트 W열 '포장비 계수' (행별, 현재 26년 1~9월 포장비 ÷ 동량 일괄값). 제품에만 적용</td></tr>
+    <tr><td>부재료비 단가 (백만원/톤)</td><td>세선비중 × 세선 계수 + 태선비중 × 태선 계수 (계수 = 26년 세·태선별 부재료비 ÷ 동량, 원/kg ÷ 1,000) (계수: 동량지수_부재료비 U·V열, 키 = 제품군+상세+거래선+통화)</td></tr>
     <tr><td>동재료비 (제품)</td><td>제품 동량 × 적용동가 ÷ 1,000</td></tr>
     <tr><td>부재료비</td><td>제품: 제품 동량 × (부재료비 단가 + 포장비 단가) / 상품: 상품 금액 × 상품재료비율(제품군)</td></tr>
     <tr><td>재료비합 · 재료비율</td><td>동재료비 + 부재료비 / 재료비합 ÷ 금액</td></tr>
@@ -278,12 +278,15 @@ function parseCoef(text){
   const k0=H.findIndex(x=>x.startsWith("부재료비 계수"));
   const cs=H2.findIndex((x,c)=>c>=k0&&x==="세선"), ct=H2.findIndex((x,c)=>c>=k0&&x==="태선");
   const cg=H.indexOf("제품군"), cd=H.indexOf("상세"), cc=H.findIndex(x=>x.endsWith("거래선")), cu=H.indexOf("통화");
+  const cw=H.findIndex(x=>x.startsWith("포장비"));   // 포장비 계수 (백만원/톤, 행별)
   if([cs,ct,cg,cd,cc,cu].some(x=>x<0)) return {error:"제품군·상세·영업거래선·통화·세선·태선 머리글을 모두 찾지 못했습니다."};
   const m={}; let n=0, blank=0;
+  const num=v=>{const x=parseNum(v);return x==null||isNaN(x)?null:x;};
   for(let i=hr+2;i<raw.length;i++){const r=raw[i]; if(!norm(r[cg])) continue;
     const key=nk(r[cg])+"|"+nk(r[cd])+"|"+nk(r[cc])+"|"+nk(r[cu]);
-    const s=parseNum(r[cs]), t=parseNum(r[ct]); m[key]={s:s==null||isNaN(s)?null:s,t:t==null||isNaN(t)?null:t}; n++; if(m[key].s==null&&m[key].t==null) blank++;}
-  return {m,n,blank};
+    m[key]={s:num(r[cs]),t:num(r[ct]),p:cw>=0?num(r[cw]):null}; n++; if(m[key].s==null&&m[key].t==null) blank++;}
+  const pv=[...new Set(Object.values(m).map(x=>x.p).filter(x=>x!=null).map(x=>+x.toFixed(4)))];
+  return {m,n,blank,hasPack:cw>=0,packVals:pv};
 }
 /* --- 계산 --- */
 function compute(){
@@ -302,7 +305,10 @@ function compute(){
   if(!B||B.error) return R;
   const Pg=P&&!P.error?P.g:{}, coefM=CF&&!CF.error?CF.m:{}, ratM=RT&&!RT.error?RT.m:{};
   // 1) 적용동가
-  const v=B.v, tot=(P&&!P.error)?P.tot:(v.tot||Array(14).fill(0));
+  const v=B.v, hasP=P&&!P.error;
+  // 제품 총동량: 생산계획 자체 동량 우선, 그 달 생산계획 값이 비어 있으면(0) 재료비동가 시트 값 사용
+  const totSrc=[]; const tot=Array.from({length:14},(_,i)=>{const pv=hasP?P.tot[i]:0, bv=v.tot?v.tot[i]:null;
+    if(pv>0){totSrc[i]="생산계획";return pv;} if(bv!=null&&bv>0){totSrc[i]="재료비동가";return bv;} totSrc[i]="-";return 0;});
   const cu=[]; for(let i=0;i<14;i++){
     const t=tot[i]||0, sq=v.sq[i]||0, jq=v.jq[i]||0, nq=t-sq-jq;
     const al=t?(sq*(v.sl[i]||0)+jq*(v.jl[i]||0)+nq*(v.nl[i]||0))/t:null;
@@ -313,7 +319,8 @@ function compute(){
     if(i>=1&&!t) add("err","적용동가",M14[i]+" 제품 총동량이 0 → 매입동가 계산 불가");
     if(nq< -1e-9) add("err","적용동가",M14[i]+" 비선물 동량 음수 ("+fmt(nq,1)+"톤) – 선물잔량이 제품 총동량보다 큼");
     if(t&&!fx) add("err","적용동가",M14[i]+" 환율 없음");
-    if(P&&!P.error&&v.tot&&v.tot[i]!=null&&Math.abs(v.tot[i]-t)>0.05) add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량("+fmt(v.tot[i],1)+")과 생산계획 자체 동량("+fmt(t,1)+")이 다름 → 생산계획 값 사용");
+    if(hasP&&totSrc[i]==="재료비동가") add("warn","적용동가",M14[i]+" 생산계획 자체 동량이 비어 있음 → 재료비동가 시트 제품 총동량("+fmt(t,1)+") 사용");
+    else if(hasP&&v.tot&&v.tot[i]!=null&&Math.abs(v.tot[i]-t)>0.05) add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량("+fmt(v.tot[i],1)+")과 생산계획 자체 동량("+fmt(t,1)+")이 다름 → 생산계획 값 사용");
   }
   const apply=MONTHS.map((_,m)=>cu[m+1].bp);
   R.cu=cu; R.apply=apply;
@@ -339,7 +346,9 @@ function compute(){
   });
   R.match=match;
   // 3) 행별 계산
-  const packM=RT&&!RT.error?RT.pk:{}; if(RT&&!RT.error&&!RT.hasPack) add("warn","포장비단가","상품재료비율 시트에 포장비단가 열이 없음 → 포장비 0");
+  const packM=RT&&!RT.error?RT.pk:{};
+  const packSrc=CF&&!CF.error&&CF.hasPack?"coef":(RT&&!RT.error&&RT.hasPack?"group":null);
+  if(!packSrc&&(CF||RT)) add("warn","포장비","동량지수_부재료비 시트 '포장비 계수' 열(또는 상품재료비율 시트 포장비단가 열)이 없음 → 포장비 0");
   const missCoef=new Set(), missRat=new Set(), missPack=new Set(); let missApply=new Set();
   R.rows=rows.map(row=>{
     const c=row.cells, g=nk(c[COL.제품군]), key=nk(c[COL.제품군])+"|"+nk(c[COL.상세제품군])+"|"+nk(c[COL.거래처])+"|"+nk(c[COL.통화]);
@@ -351,8 +360,10 @@ function compute(){
       const Gq=G[g].q[m], Ga=G[g].a[m];
       const mq=p&&Gq?p.OEM.q[m+2]*q/Gq:0, ma=p&&Ga?p.OEM.a[m+2]*a/Ga:0;
       const pq=q-mq, pa=a-ma, price=apply[m];
-      const unit=cf?tw*(cf.s||0)+th*(cf.t||0):0, pack=packM[g]||0;
-      if(pq0(q,a)&&RT&&!RT.error&&RT.hasPack&&packM[g]==null) missPack.add(norm(c[COL.제품군]));
+      const unit=cf?tw*(cf.s||0)+th*(cf.t||0):0;
+      const packRaw=packSrc==="coef"?(cf&&cf.p!=null?cf.p:(packM[g]!=null?packM[g]:null)):(packSrc==="group"?packM[g]:0);
+      const pack=packRaw||0;
+      if(pq0(q,a)&&packSrc&&packRaw==null) missPack.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
       if((q||a)&&CF&&!CF.error&&(!cf||(cf.s==null&&cf.t==null))) missCoef.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
       if(ma&&RT&&!RT.error&&(rat==null)) missRat.add(norm(c[COL.제품군]));
       if(pq&&price==null) missApply.add(m+1);
@@ -363,7 +374,7 @@ function compute(){
   });
   missCoef.forEach(k=>add("err","부재료비 계수","계수 없음: "+k+" → 제품 부재료비 0"));
   missRat.forEach(g=>add("err","상품재료비율","제품군 '"+g+"' 비율 없음 → 상품 재료비 0"));
-  missPack.forEach(g=>add("err","포장비단가","제품군 '"+g+"' 포장비단가 없음 → 포장비 0"));
+  missPack.forEach(g=>add("err","포장비","포장비 계수 없음: "+g+" → 포장비 0"));
   missApply.forEach(m=>add("err","적용동가",m+"월 적용동가 없음 (전월 매입동가 계산 불가)"));
   if(R.excluded) add("info","영업 매출계획","선박선 외 "+R.excluded+"행(광통신 등)은 이번 범위에서 제외");
   R.ok=true; return R;
@@ -413,7 +424,7 @@ function runAll(){
   $("info-prod").textContent=P?(P.error?"오류: "+P.error:`제품군 ${Object.keys(P.g).length}개 · 데이터 ${P.n}행 인식 (자체·OEM)`):""; st("st-prod",!P?"":(P.error?"err":"ok"));
   $("info-basis").textContent=B?(B.error?"오류: "+B.error:`목표 프리미엄 ${fmt(B.target)} · 14개월 인식`):""; st("st-basis",!B?"":(B.error?"err":"ok"));
   $("info-ratio").textContent=RT?(RT.error?"오류: "+RT.error:Object.entries(RT.m).map(([k,v])=>k+" "+(v==null?"(빈칸)":(v*100).toFixed(1)+"%")+(RT.hasPack?" / 포장 "+(RT.pk[k]==null?"(빈칸)":RT.pk[k]):"")).join(" · ")):""; st("st-ratio",!RT?"":(RT.error?"err":"ok"));
-  $("info-coef").textContent=CF?(CF.error?"오류: "+CF.error:`${CF.n}행 인식${CF.blank?` · 계수 빈칸 ${CF.blank}행`:""}`):""; st("st-coef",!CF?"":(CF.error?"err":(CF.blank?"warn":"ok")));
+  $("info-coef").textContent=CF?(CF.error?"오류: "+CF.error:`${CF.n}행 인식${CF.blank?` · 계수 빈칸 ${CF.blank}행`:""}`+(CF.hasPack?` · 포장비 계수 ${CF.packVals.slice(0,3).join(", ")}${CF.packVals.length>3?" 외":""}`:" · 포장비 계수 열 없음")):""; st("st-coef",!CF?"":(CF.error?"err":(CF.blank?"warn":"ok")));
   RES=compute(); render();
 }
 function render(){
