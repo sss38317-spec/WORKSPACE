@@ -1,4 +1,4 @@
-"""재료비 기준 양식: ① 재료비동가 (26년 11월 ~ 27년 12월), ② 상품재료비율 (제품군별 1개).
+"""재료비 기준 양식: ① 재료비동가 (26년 11월 ~ 27년 12월), ② 상품재료비율·포장비단가 (제품군별 1개).
 
 사용: python build_basis_template.py <출력.xlsx> [영업 예시양식.xlsx (동량지수 시트 예시 복사용)]
 기존 '재료비 동가 예시' 산식을 따르되: 월별 지침 값, 연간 목표 프리미엄 1개, 26년 11·12월 예상 값, 전월 매입동가 = 당월 적용동가.
@@ -119,17 +119,18 @@ for i, t in enumerate([
 # ---- 상품재료비율
 g = wb.create_sheet("상품재료비율")
 g.column_dimensions["A"].width = 2
-for col, w in zip("BCDE", [14, 16, 26, 40]): g.column_dimensions[col].width = w
-g["B1"] = "상품재료비율 (제품군별 1개)"; g["B1"].font = f_t
-for i, h in enumerate(["제품군", "상품재료비율", "산출 기준 (예: 26년 1~10월 실적)", "비고"]):
+for col, w in zip("BCDEF", [14, 16, 18, 26, 40]): g.column_dimensions[col].width = w
+g["B1"] = "제품군별 기준 (상품재료비율 · 포장비단가)"; g["B1"].font = f_t
+for i, h in enumerate(["제품군", "상품재료비율", "포장비단가 (백만원/톤)", "산출 기준 (예: 26년 1~10월 실적)", "비고"]):
     c = g.cell(3, 2 + i, h); c.font = f_b; c.fill = hd; c.border = bd; c.alignment = ctr
 for i, nm in enumerate(["상선용", "해양용", "이동용", "전력용"]):
     r = 4 + i
     g.cell(r, 2, nm).font = f_c
-    for c in range(2, 6): g.cell(r, c).border = bd
+    for c in range(2, 7): g.cell(r, c).border = bd
     x = g.cell(r, 3); x.fill = yin; x.font = f_in; x.number_format = "0.0%"
-    y = g.cell(r, 4); y.fill = yin; y.font = f_in
-g["B9"] = "※ 상품(생산/OEM) 재료비 = 상품 매출액 × 상품재료비율 → 전액 부재료비로 표시"; g["B9"].font = Font(name=F, size=9, color="C00000")
+    z = g.cell(r, 4); z.fill = yin; z.font = f_in; z.number_format = "0.000"
+    y = g.cell(r, 5); y.fill = yin; y.font = f_in
+g["B9"] = "※ 상품(생산/OEM) 재료비 = 상품 매출액 × 상품재료비율 → 전액 부재료비로 표시 / 제품 부재료비 = 제품 동량 × (세·태선 부재료비 단가 + 포장비단가)"; g["B9"].font = Font(name=F, size=9, color="C00000")
 g["B10"] = "※ 제품군 이름은 영업 매출계획 D열·생산계획 제품분류와 같아야 합니다. 제품군을 추가하면 행을 늘려 입력하세요."; g["B10"].font = Font(name=F, size=9, color="C00000")
 # ---- 동량지수_부재료비 (B~R = 영업 양식 동량지수 시트와 같은 구조, U·V = 부재료비 계수)
 ix = wb.create_sheet("동량지수_부재료비")

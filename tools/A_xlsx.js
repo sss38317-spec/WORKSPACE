@@ -113,7 +113,7 @@ function buildWorkbook(){
   // ---------- 2) 상세 (수식) ----------
   const D=XLSX_W.Sheet("상세");
   const FR=[["엑셀행",null],...FRONT.map(f=>[f[1],f[0]])]; // A~R
-  const cS=FR.length+1, cT=cS+1, cU=cS+2, MB=cS+3, MWD=16;   // 계수 세선(S), 태선(T), 상품재료비율(U), 월 블록 시작
+  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, MB=cS+4, MWD=16;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
   const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
   const mc=(m,k)=>MB+m*MWD+DK.indexOf(k);
   const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
@@ -121,7 +121,7 @@ function buildWorkbook(){
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
   FR.forEach((f,i)=>{D.set(3,1+i,"",H);D.set(4,1+i,f[0],H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
-  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
+  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
     DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품재료비"].includes(k)?HM:(["제품동량","제품매출","제품부재료비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
@@ -131,6 +131,7 @@ function buildWorkbook(){
     D.set(r,1,rw.row.excelRow,TX); FRONT.forEach((f,j)=>{const v=c[COL[f[0]]];const nv=parseNum(v);D.set(r,2+j,(nv!=null&&!isNaN(nv)&&j>=8)?nv:norm(v),j>=8?NUM(j>=12&&j<=15?"n3":"n2"):TX);});
     D.set(r,cS,rw.cf?rw.cf.s:"",NUM("n3",{fill:"inp"}));D.set(r,cT,rw.cf?rw.cf.t:"",NUM("n3",{fill:"inp"}));
     D.set(r,cU,rw.rat||0,NUM("pct"),`SUMIFS(${PB}!$C:$C,${PB}!$A:$A,$D${r},${PB}!$B:$B,"상품재료비율")`);
+    D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3"),`SUMIFS(${PB}!$C:$C,${PB}!$A:$A,$D${r},${PB}!$B:$B,"포장비단가")`);
     rw.mon.forEach((x,m)=>{const ref=k=>C(mc(m,k))+r, pc=`${PB}!${C(3+m)}:${C(3+m)}`, crit=t=>`${PB}!$A:$A,$D${r},${PB}!$B:$B,"${t}"`;
       D.set(r,mc(m,"동량"),x.q,NUM("n2",{fill:"inp"}));D.set(r,mc(m,"매출액"),x.a,NUM("n1",{fill:"inp"}));
       D.set(r,mc(m,"세선비중"),x.tw,NUM("pct",{fill:"inp"}));D.set(r,mc(m,"태선비중"),x.th,NUM("pct",{fill:"inp"}));
@@ -141,7 +142,7 @@ function buildWorkbook(){
       D.set(r,mc(m,"적용동가"),x.price||0,NUM("n1"),apRef(m));
       D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`${ref("세선비중")}*$${C(cS)}${r}+${ref("태선비중")}*$${C(cT)}${r}`);
       D.set(r,mc(m,"동재료비"),x.pcu,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000`);
-      D.set(r,mc(m,"제품부재료비"),x.psub,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*${ref("부재료비단가")}`);
+      D.set(r,mc(m,"제품부재료비"),x.psub,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*(${ref("부재료비단가")}+$${C(cV)}${r})`);
       D.set(r,mc(m,"상품재료비"),x.msub,NUM("n1",{fill:"merch"}),`${ref("상품매출")}*$${C(cU)}${r}`);
       D.set(r,mc(m,"부재료비"),x.psub+x.msub,NUM("n1"),`${ref("제품부재료비")}+${ref("상품재료비")}`);
       D.set(r,mc(m,"재료비합"),x.pcu+x.psub+x.msub,NUM("n1",{font:"b"}),`${ref("동재료비")}+${ref("부재료비")}`);
@@ -165,9 +166,10 @@ function buildWorkbook(){
       MONTHS.forEach((_,m)=>PBs.set(r,3+m,fn(m),NUM(fmt,ff?{}:{fill:"inp"}),ff?ff(m):null));
       PBs.set(r,15,sumA(MONTHS.map((_,m)=>fn(m))),NUM(fmt,{fill:"sub"}),`SUM(C${r}:N${r})`);});
     PBs.set(pr+4,1,g,TX);PBs.set(pr+4,2,"상품재료비율",TX);PBs.set(pr+4,3,ratM[gk]==null?"":ratM[gk],NUM("pct",{fill:"inp"}));
-    pr+=6;});
+    const pkM=RT&&!RT.error?RT.pk:{};PBs.set(pr+5,1,g,TX);PBs.set(pr+5,2,"포장비단가",TX);PBs.set(pr+5,3,pkM[gk]==null?"":pkM[gk],NUM("n3",{fill:"inp"}));
+    pr+=7;});
   PBs.cols={1:10,2:14};for(let c=3;c<=15;c++)PBs.cols[c]=10;PBs.freeze=[4,3];
-  PBs.set(pr,1,"※ 매출 동량·금액 = 상세 시트 SUMIF(수식), OEM 동량·금액 = 생산계획 생산/OEM(입력값), 상품재료비율 = 재료비 기준(입력값)",NOTE);
+  PBs.set(pr,1,"※ 매출 동량·금액 = 상세 시트 SUMIF(수식), OEM 동량·금액 = 생산계획 생산/OEM(입력값), 상품재료비율·포장비단가 = 재료비 기준(입력값)",NOTE);
   // ---------- 4) 보고양식 (SUMIFS 수식) ----------
   const Rp=XLSX_W.Sheet("보고양식"); const rep=buildReport(R);
   Rp.set(1,1,"연간 매출 / 재료비 TOTAL"+(state.verName?" – "+state.verName:""),T); Rp.set(2,1,"(단위: 금액·재료비 백만원 / 동량 톤 / 톤당단가 백만원/톤)",NOTE);

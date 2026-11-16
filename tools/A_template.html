@@ -107,8 +107,8 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
       <div class="muted" id="info-basis"></div>
     </div>
     <div class="card">
-      <h2>4. 재료비 기준 · 상품재료비율 <span class="st" id="st-ratio"></span></h2>
-      <p class="help">'상품재료비율' 시트 <b>3행(머리글)부터, A~E열</b>. 제품군별 1개 비율.</p>
+      <h2>4. 재료비 기준 · 상품재료비율 · 포장비단가 <span class="st" id="st-ratio"></span></h2>
+      <p class="help">'상품재료비율' 시트 <b>3행(머리글)부터, A~F열</b>. 제품군별 상품재료비율·포장비단가(백만원/톤).</p>
       <textarea id="in-ratio" placeholder="여기에 붙여넣기 (Ctrl+V)" style="height:90px"></textarea>
       <div class="muted" id="info-ratio"></div>
       <h2 style="margin-top:12px">5. 재료비 기준 · 동량지수_부재료비 <span class="st" id="st-coef"></span></h2>
@@ -174,9 +174,10 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
     <tr><td>적용동가</td><td>전월 매입동가 (27년 1월 = 26년 12월 매입동가)</td></tr>
     <tr><td>상품 동량 / 금액</td><td>제품군 OEM 동량 × (거래처 동량 ÷ 제품군 동량) / 제품군 OEM 금액 × (거래처 매출 ÷ 제품군 매출)</td></tr>
     <tr><td>제품 동량 / 금액</td><td>거래처 전체 − 상품</td></tr>
+    <tr><td>포장비 단가 (백만원/톤)</td><td>제품군별 일괄 단가 (재료비 기준 · 상품재료비율 시트 포장비단가 열). 제품에만 적용</td></tr>
     <tr><td>부재료비 단가 (백만원/톤)</td><td>세선비중 × 세선 계수 + 태선비중 × 태선 계수 (계수: 동량지수_부재료비 U·V열, 키 = 제품군+상세+거래선+통화)</td></tr>
     <tr><td>동재료비 (제품)</td><td>제품 동량 × 적용동가 ÷ 1,000</td></tr>
-    <tr><td>부재료비</td><td>제품: 제품 동량 × 부재료비 단가 / 상품: 상품 금액 × 상품재료비율(제품군)</td></tr>
+    <tr><td>부재료비</td><td>제품: 제품 동량 × (부재료비 단가 + 포장비 단가) / 상품: 상품 금액 × 상품재료비율(제품군)</td></tr>
     <tr><td>재료비합 · 재료비율</td><td>동재료비 + 부재료비 / 재료비합 ÷ 금액</td></tr>
     <tr><td>톤당단가</td><td>금액 ÷ 동량 (동량지수)</td></tr>
   </table></div>
@@ -198,6 +199,7 @@ function load(){try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s)Ob
 const nz=v=>{const x=parseNum(v);return x==null||isNaN(x)?0:x;};
 const nk=v=>norm(v).replace(/\s/g,"").toUpperCase();
 const sumA=a=>a.reduce((s,x)=>s+(x||0),0);
+const pq0=(q,a)=>!!(q||a);
 
 /* --- 생산계획 --- */
 function parseProd(text){
@@ -260,11 +262,12 @@ function parseBasis(text){
 /* --- 상품재료비율 --- */
 function parseRatio(text){
   const raw=parseTSV(text); if(!raw.length) return null;
-  let hr=-1,cg=-1,cr=-1;
-  for(let i=0;i<raw.length&&hr<0;i++){const r=raw[i].map(norm);const a=r.indexOf("제품군"),b=r.findIndex(x=>x.startsWith("상품재료비율"));if(a>=0&&b>=0){hr=i;cg=a;cr=b;}}
+  let hr=-1,cg=-1,cr=-1,cp=-1;
+  for(let i=0;i<raw.length&&hr<0;i++){const r=raw[i].map(norm);const a=r.indexOf("제품군"),b=r.findIndex(x=>x.startsWith("상품재료비율"));if(a>=0&&b>=0){hr=i;cg=a;cr=b;cp=r.findIndex(x=>x.startsWith("포장비"));}}
   if(hr<0) return {error:"'제품군'·'상품재료비율' 머리글을 찾지 못했습니다."};
-  const m={}; for(let i=hr+1;i<raw.length;i++){const g=nk(raw[i][cg]);if(!g||g.startsWith("※"))continue;const v=parseNum(raw[i][cr]);m[g]=v==null||isNaN(v)?null:(v>1.5?v/100:v);}
-  return {m};
+  const m={}, pk={}; for(let i=hr+1;i<raw.length;i++){const g=nk(raw[i][cg]);if(!g||g.startsWith("※"))continue;const v=parseNum(raw[i][cr]);m[g]=v==null||isNaN(v)?null:(v>1.5?v/100:v);
+    if(cp>=0){const w=parseNum(raw[i][cp]);pk[g]=w==null||isNaN(w)?null:w;}}
+  return {m,pk,hasPack:cp>=0};
 }
 /* --- 동량지수_부재료비 --- */
 function parseCoef(text){
@@ -336,7 +339,8 @@ function compute(){
   });
   R.match=match;
   // 3) 행별 계산
-  const missCoef=new Set(), missRat=new Set(); let missApply=new Set();
+  const packM=RT&&!RT.error?RT.pk:{}; if(RT&&!RT.error&&!RT.hasPack) add("warn","포장비단가","상품재료비율 시트에 포장비단가 열이 없음 → 포장비 0");
+  const missCoef=new Set(), missRat=new Set(), missPack=new Set(); let missApply=new Set();
   R.rows=rows.map(row=>{
     const c=row.cells, g=nk(c[COL.제품군]), key=nk(c[COL.제품군])+"|"+nk(c[COL.상세제품군])+"|"+nk(c[COL.거래처])+"|"+nk(c[COL.통화]);
     const cf=coefM[key], rat=ratM[g], p=Pg[g];
@@ -347,17 +351,19 @@ function compute(){
       const Gq=G[g].q[m], Ga=G[g].a[m];
       const mq=p&&Gq?p.OEM.q[m+2]*q/Gq:0, ma=p&&Ga?p.OEM.a[m+2]*a/Ga:0;
       const pq=q-mq, pa=a-ma, price=apply[m];
-      const unit=cf?tw*(cf.s||0)+th*(cf.t||0):0;
+      const unit=cf?tw*(cf.s||0)+th*(cf.t||0):0, pack=packM[g]||0;
+      if(pq0(q,a)&&RT&&!RT.error&&RT.hasPack&&packM[g]==null) missPack.add(norm(c[COL.제품군]));
       if((q||a)&&CF&&!CF.error&&(!cf||(cf.s==null&&cf.t==null))) missCoef.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
       if(ma&&RT&&!RT.error&&(rat==null)) missRat.add(norm(c[COL.제품군]));
       if(pq&&price==null) missApply.add(m+1);
-      const pcu=pq*(price||0)/1000, psub=pq*unit, msub=ma*(rat||0);
-      return {q,a,tw,th,mq,ma,pq,pa,price,unit,pcu,psub,msub,cuT:pcu,subT:psub+msub};
+      const pcu=pq*(price||0)/1000, psub=pq*(unit+pack), msub=ma*(rat||0);
+      return {q,a,tw,th,mq,ma,pq,pa,price,unit,pack,pcu,psub,msub,cuT:pcu,subT:psub+msub};
     });
     return {row,key,cf,rat,mon};
   });
   missCoef.forEach(k=>add("err","부재료비 계수","계수 없음: "+k+" → 제품 부재료비 0"));
   missRat.forEach(g=>add("err","상품재료비율","제품군 '"+g+"' 비율 없음 → 상품 재료비 0"));
+  missPack.forEach(g=>add("err","포장비단가","제품군 '"+g+"' 포장비단가 없음 → 포장비 0"));
   missApply.forEach(m=>add("err","적용동가",m+"월 적용동가 없음 (전월 매입동가 계산 불가)"));
   if(R.excluded) add("info","영업 매출계획","선박선 외 "+R.excluded+"행(광통신 등)은 이번 범위에서 제외");
   R.ok=true; return R;
@@ -406,7 +412,7 @@ function runAll(){
   st("st-sales",!parsed?"":(parsed.error||parsed.check.bad?"err":"ok"));
   $("info-prod").textContent=P?(P.error?"오류: "+P.error:`제품군 ${Object.keys(P.g).length}개 · 데이터 ${P.n}행 인식 (자체·OEM)`):""; st("st-prod",!P?"":(P.error?"err":"ok"));
   $("info-basis").textContent=B?(B.error?"오류: "+B.error:`목표 프리미엄 ${fmt(B.target)} · 14개월 인식`):""; st("st-basis",!B?"":(B.error?"err":"ok"));
-  $("info-ratio").textContent=RT?(RT.error?"오류: "+RT.error:Object.entries(RT.m).map(([k,v])=>k+" "+(v==null?"(빈칸)":(v*100).toFixed(1)+"%")).join(" · ")):""; st("st-ratio",!RT?"":(RT.error?"err":"ok"));
+  $("info-ratio").textContent=RT?(RT.error?"오류: "+RT.error:Object.entries(RT.m).map(([k,v])=>k+" "+(v==null?"(빈칸)":(v*100).toFixed(1)+"%")+(RT.hasPack?" / 포장 "+(RT.pk[k]==null?"(빈칸)":RT.pk[k]):"")).join(" · ")):""; st("st-ratio",!RT?"":(RT.error?"err":"ok"));
   $("info-coef").textContent=CF?(CF.error?"오류: "+CF.error:`${CF.n}행 인식${CF.blank?` · 계수 빈칸 ${CF.blank}행`:""}`):""; st("st-coef",!CF?"":(CF.error?"err":(CF.blank?"warn":"ok")));
   RES=compute(); render();
 }
@@ -450,10 +456,11 @@ function renderReport(){
   });
   $("repTable").innerHTML=h;
 }
-const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가","unit",3],["동재료비","cuT",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
+const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가(세·태선)","unit",3],["포장비단가","pack",3],["동재료비","cuT",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
 function dval(x,k){if(k==="sumT")return x.cuT+x.subT;if(k==="rateT")return x.a?(x.cuT+x.subT)/x.a:0;return x[k];}
 function yearRow(r){const s=k=>sumA(r.mon.map(x=>x[k]));const y={q:s("q"),a:s("a"),pq:s("pq"),mq:s("mq"),pa:s("pa"),ma:s("ma"),cuT:s("cuT"),subT:s("subT"),psub:s("psub")};
-  y.price=y.pq?y.cuT*1000/y.pq:0; y.unit=y.pq?y.psub/y.pq:0; return y;}
+  const wq=k=>y.pq?sumA(r.mon.map(x=>x.pq*(x[k]||0)))/y.pq:0;
+  y.price=y.pq?y.cuT*1000/y.pq:0; y.unit=wq("unit"); y.pack=wq("pack"); return y;}
 const FRONT=[["사업부","사업부"],["부서","부서"],["제품군","제품군"],["상세제품군","상세제품군"],["거래처","거래처"],["BACKLOG","BACKLOG구분"],["프로젝트","프로젝트명"],["선종","선종"],["수수료율","판매수수료율"],["운송비율","해외운송비율"],["연동","동/환 연동"],["통화","계약통화"],["세선비중","세선 비중"],["세선지수","세선 동량지수"],["태선비중","태선 비중"],["태선지수","태선 동량지수"],["수주LME","수주LME"]];
 function renderDetail(){
   const ds=$("detM"); if(!ds.options.length) ds.innerHTML=MONTHS.map((m,i)=>`<option value="${i}">${m}</option>`).join("")+'<option value="Y">연간</option>';

@@ -76,7 +76,8 @@ bas[-2][2]="매입동가"
 bas.insert(len(bas)-2, br("","환율","원/$",fx))
 # ---- 상품재료비율
 RAT={'상선용':0.85,'해양용':0.80,'이동용':0.78,'전력용':0.82}
-rat=[["","제품군","상품재료비율","산출 기준 (예: 26년 1~10월 실적)","비고"]]+[["",k,f"{v*100:.1f}%","예시",""] for k,v in RAT.items()]
+PACK={'상선용':0.35,'해양용':0.40,'이동용':0.30,'전력용':0.50}
+rat=[["","제품군","상품재료비율","포장비단가 (백만원/톤)","산출 기준 (예: 26년 1~10월 실적)","비고"]]+[["",k,f"{v*100:.1f}%",PACK[k],"예시",""] for k,v in RAT.items()]
 # ---- 동량지수_부재료비 (기준양식 시트 10~ 행)
 wb=openpyxl.load_workbook('/home/user/WORKSPACE/재료비_기준양식.xlsx',data_only=False)
 ix=wb['동량지수_부재료비']
@@ -106,7 +107,7 @@ for d in sales:
         q,a=d['q'][m],d['a'][m]; g=d['g']
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
-        pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct
+        pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACK[g]
         cu=pq*apply[m]/1000; sub=pq*unit+oa*RAT[g]
         tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=oa*RAT[g]
 tsv=lambda rr: "\n".join("\t".join(('"'+str(x).replace('"','""')+'"') if any(ch in str(x) for ch in '\t\n"') else str(x) for x in r) for r in rr)
