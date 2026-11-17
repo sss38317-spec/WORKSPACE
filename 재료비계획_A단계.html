@@ -132,7 +132,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
       <button class="btn ovrReset">수정 0칸 · 모두 되돌리기</button>
     </div>
     <p class="help"><b>노란 칸은 바로 수정할 수 있습니다</b> (Enter 또는 다른 칸 클릭 시 즉시 재계산). 수정한 칸은 주황 테두리로 표시되며, 보고 양식·엑셀 다운로드에도 반영됩니다. 엑셀 원본은 바뀌지 않습니다.</p>
-    <p class="help">제품 총동량 = 생산계획 생산/자체 합계 (그 달 생산계획이 비어 있으면 재료비동가 시트 값). 매입동가 = (평균 LME + 목표 프리미엄) × 환율 ÷ 1,000, 적용동가 = 전월 매입동가.</p>
+    <p class="help">제품 총동량 = 재료비동가 시트에 붙여넣은 값 (그 달 값이 비어 있으면 생산계획 생산/자체 합계). 매입동가 = (평균 LME + 목표 프리미엄) × 환율 ÷ 1,000, 적용동가 = 전월 매입동가.</p>
     <div class="scroll"><table id="cuTable"></table></div>
   </div>
 </section>
@@ -179,7 +179,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
   <div class="card"><h2>A단계 계산 규칙</h2><div class="scroll"><table>
     <tr><th>항목</th><th>산식</th></tr>
     <tr><td>대상</td><td>영업 매출계획 중 사업부 = 선박선 (광통신 제외). 동량·매출액은 영업 파일 값 그대로</td></tr>
-    <tr><td>제품 총동량 (월)</td><td>생산계획 생산/자체 동량 합계 (사업장·제품군 합산). 그 달 생산계획이 비어 있으면 재료비동가 시트 제품 총동량</td></tr>
+    <tr><td>제품 총동량 (월)</td><td>재료비동가 시트에 붙여넣은 제품 총동량. 그 달 값이 비어 있으면 생산계획 생산/자체 동량 합계 (사업장·제품군 합산). 둘이 다르면 검증 탭에 표시</td></tr>
     <tr><td>비선물 동량</td><td>제품 총동량 − SCR 선물잔량 − JCR 선물잔량</td></tr>
     <tr><td>평균 LME</td><td>(SCR량×SCR LME + JCR량×JCR LME + 비선물량×비선물 LME) ÷ 제품 총동량</td></tr>
     <tr><td>매입동가 (원/kg)</td><td>(평균 LME + 목표 프리미엄) × 환율 ÷ 1,000</td></tr>
@@ -521,10 +521,10 @@ function compute(useOvr=true){
   const target=O.target!=null?O.target:B.target; R.target=target;
   const hasP=P&&!P.error;
   const sv=(r,m,k)=>{const o=os[r.src+"|"+m+"|"+k]; return o!=null?o:nz(r.cells[M0+m*MW+(k==="q"?OFF.동량:OFF.매출)]);};
-  // 제품 총동량: 생산계획 자체 동량 우선, 그 달 생산계획 값이 비어 있으면(0) 재료비동가 시트 값 사용
+  // 제품 총동량: 재료비동가 시트에 붙여넣은 값 우선, 그 달 값이 비어 있으면(0) 생산계획 자체 동량 사용
   const totSrc=[]; const tot=Array.from({length:14},(_,i)=>{if(ob.tot&&ob.tot[i]!=null){totSrc[i]="수정";return ob.tot[i];}
     const pv=hasP?P.tot[i]:0, bv=B.v.tot?B.v.tot[i]:null;
-    if(pv>0){totSrc[i]="생산계획";return pv;} if(bv!=null&&bv>0){totSrc[i]="재료비동가";return bv;} totSrc[i]="-";return 0;});
+    if(bv!=null&&bv>0){totSrc[i]="재료비동가";return bv;} if(pv>0){totSrc[i]="생산계획";return pv;} totSrc[i]="-";return 0;});
   const cu=[]; for(let i=0;i<14;i++){
     const t=tot[i]||0, sq=v.sq[i]||0, jq=v.jq[i]||0, nq=t-sq-jq;
     const al=t?(sq*(v.sl[i]||0)+jq*(v.jl[i]||0)+nq*(v.nl[i]||0))/t:null;
@@ -535,8 +535,8 @@ function compute(useOvr=true){
     if(i>=1&&!t) add("err","적용동가",M14[i]+" 제품 총동량이 0 → 매입동가 계산 불가");
     if(nq< -1e-9) add("err","적용동가",M14[i]+" 비선물 동량 음수 ("+fmt(nq,1)+"톤) – 선물잔량이 제품 총동량보다 큼");
     if(t&&!fx) add("err","적용동가",M14[i]+" 환율 없음");
-    if(hasP&&totSrc[i]==="재료비동가") add("warn","적용동가",M14[i]+" 생산계획 자체 동량이 비어 있음 → 재료비동가 시트 제품 총동량("+fmt(t,1)+") 사용");
-    else if(hasP&&totSrc[i]!=="수정"&&B.v.tot&&B.v.tot[i]!=null&&Math.abs(B.v.tot[i]-t)>0.05) add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량("+fmt(v.tot[i],1)+")과 생산계획 자체 동량("+fmt(t,1)+")이 다름 → 생산계획 값 사용");
+    if(totSrc[i]==="생산계획") add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량이 비어 있음 → 생산계획 자체 동량("+fmt(t,3)+") 사용");
+    else if(hasP&&totSrc[i]==="재료비동가"&&P.tot[i]>0&&Math.abs(P.tot[i]-t)>0.0005) add("warn","적용동가",M14[i]+" 붙여넣은 제품 총동량("+fmt(t,3)+")과 생산계획 자체 동량("+fmt(P.tot[i],3)+")이 다름 (차이 "+fmt(t-P.tot[i],3)+") → 붙여넣은 값 사용");
   }
   const apply=MONTHS.map((_,m)=>cu[m+1].bp);
   R.cu=cu; R.apply=apply;
@@ -857,7 +857,7 @@ function buildWorkbook(){
   const A=XLSX_W.Sheet("적용동가"); sheets.push(A);
   A.set(1,1,"적용동가 계산 (26년 11월 ~ 27년 12월)",T); A.set(2,1,"목표 프리미엄 ($/톤, 연간)",TXB); A.set(2,2,R.target!=null?R.target:B.target,NUM("n0",{fill:"inp"}));
   A.set(4,1,"항목",H);A.set(4,2,"단위",H); M14.forEach((m,i)=>A.set(4,3+i,m,H));
-  const AR={}; const arows=[["t","제품 총동량 (생산계획 자체)","톤","v",x=>x.t,"n1"],["sq","SCR 선물잔량","톤","v",x=>x.sq,"n1"],["sl","SCR 선물LME","$/톤","v",x=>x.sl,"n0"],
+  const AR={}; const arows=[["t","제품 총동량","톤","v",x=>x.t,"n1"],["sq","SCR 선물잔량","톤","v",x=>x.sq,"n1"],["sl","SCR 선물LME","$/톤","v",x=>x.sl,"n0"],
     ["jq","JCR 선물잔량","톤","v",x=>x.jq,"n1"],["jl","JCR 선물LME","$/톤","v",x=>x.jl,"n0"],["nq","비선물 동량","톤","f",null,"n1"],["nl","비선물 LME","$/톤","v",x=>x.nl,"n0"],
     ["al","평균 LME (프리미엄 제외)","$/톤","f",null,"n1"],["tp","계획 적용 프리미엄 (목표)","$/톤","f",null,"n0"],["ll","평균 LME (프리미엄 포함)","$/톤","f",null,"n1"],
     ["fx","환율","원/$","v",x=>x.fx,"n2"],["bp","매입동가","원/kg","f",null,"n1"],["ap","적용동가 (= 전월 매입동가)","원/kg","f",null,"n1"]];
