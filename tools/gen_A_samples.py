@@ -75,10 +75,17 @@ bas[-2][2]="매입동가"
 # 환율 행 (매입동가 앞)
 bas.insert(len(bas)-2, br("","환율","원/$",fx))
 # ---- 상품재료비율
-RAT={'상선용':0.85,'해양용':0.80,'이동용':0.78,'전력용':0.82}
+# 상품재료비율: 상세제품군별 1~9월 상품 매출·원가 실적 (사용자 제공 표)
+RTAB=[("상선용","JIS",12904483,15931311733,13996932140),("","XLPE",1054333,5884064473,5602298999),("해양용","NEK",109326,906656760,713545292),("광선박","선박용광",9711,260816653,226824548)]
+RTOT=(14077853,22982849619,20539600979)
+RATd={}; _g=""
+for g_,d_,q_,a_,c_ in RTAB:
+    _g=g_ or _g; RATd[(_g,d_)]=c_/a_
+RTOTAL=RTOT[2]/RTOT[1]
+def ratOf(g,det): return RATd.get((g,det),RTOTAL)
 PACKW=0.303089   # 포장비 계수 (백만원/톤) – 사용자 기준양식처럼 전 행 일괄값
 # 상품재료비율 (사용자 수정 양식: 3행 머리글, 4행 매출액·재료비 보조 머리글, 5행부터 값)
-rat=[["","제품군","상품재료비율","산출 기준 (예: 26년 1~10월 실적)","","비고"],["","","","매출액","재료비",""]]+[["",k,v,"","",""] for k,v in RAT.items()]
+rat=[["","품목자산분류","상품"],["","* 1~9월 매출 및 원가실적 "],["","","","값"],["","제품군","상세","합계 : 기준단위수량","합계 : 원화판매금액","합계 : 상품매출원가",""]]+[["",g_,d_,q_,a_,c_,f"{c_/a_*100:.1f}%"] for g_,d_,q_,a_,c_ in RTAB]+[["","총합계","",*RTOT,f"{RTOTAL*100:.1f}%"]]
 # ---- 동량지수_부재료비 (사용자 수정 양식: B~R 영업 동량지수 구조, T~V 부재료비 계수, W 포장비 계수)
 ix=openpyxl.load_workbook(f'{S}/src/sales.xlsx',data_only=False)['동량지수_1~9월 매출품목']
 COEF={'JIS':(4.2137,2.6058),'XLPE':(3.9124,2.4381),'NEK':(4.5212,2.9067),'TYPE P':(4.0453,2.5179),'MIL':(5.0318,3.0246)}
@@ -110,8 +117,8 @@ for d in sales:
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
         pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACKW
-        cu=pq*apply[m]/1000; sub=pq*unit+oa*RAT[g]
-        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=oa*RAT[g]
+        cu=pq*apply[m]/1000; sub=pq*unit+oa*ratOf(g,d['det'])
+        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=oa*ratOf(g,d['det'])
 tsv=lambda rr: "\n".join("\t".join(('"'+str(x).replace('"','""')+'"') if any(ch in str(x) for ch in '\t\n"') else str(x) for x in r) for r in rr)
 out={'sales':tsv([*hdr,*rows]),'prod':tsv(prod),'basis':tsv(bas),'ratio':tsv(rat),'coef':tsv(coef)}
 json.dump(out,open(f'{S}/A_samples.json','w'),ensure_ascii=False)
