@@ -200,6 +200,9 @@ const nz=v=>{const x=parseNum(v);return x==null||isNaN(x)?0:x;};
 const nk=v=>norm(v).replace(/\s/g,"").toUpperCase();
 const sumA=a=>a.reduce((s,x)=>s+(x||0),0);
 const pq0=(q,a)=>!!(q||a);
+// 붙여넣은 글자의 소수 자릿수 (엑셀은 표시된 값만 복사 → 서식 때문에 잘렸는지 확인)
+const decs=v=>{const t=String(v??"").trim().replace(/[,\s]/g,"");const m=t.match(/\.(\d+)/);return m?m[1].length:0;};
+function decTrack(){const o={max:0,n:0};o.add=v=>{const x=parseNum(v);if(x!=null&&!isNaN(x)&&x!==0){o.n++;o.max=Math.max(o.max,decs(v));}};return o;}
 
 /* --- 생산계획 --- */
 function parseProd(text){
@@ -214,7 +217,7 @@ function parseProd(text){
   if(miss.length) return {error:"머리글을 찾지 못한 항목: "+miss.join(", ")};
   let cE=-1; for(let i=hr+2;i<raw.length&&cE<0;i++){const k=raw[i].findIndex(x=>norm(x)==="동량"); if(k>=0) cE=k;}
   if(cE<0) return {error:"'동량/금액' 구분 열을 찾지 못했습니다."};
-  const cols=[c11,c12,...mcol]; const g={}; const tot=Array(14).fill(0); let curB="",curC="",curD="",n=0;
+  const cols=[c11,c12,...mcol]; const g={}; const tot=Array(14).fill(0); let curB="",curC="",curD="",n=0; const dq=decTrack();
   for(let i=hr+2;i<raw.length;i++){
     const r=raw[i]; const b=norm(r[cB]), c=cC>=0?norm(r[cC]):"", d=norm(r[cD]), e=norm(r[cE]);
     if(b) curB=b; if(c) curC=c; if(d) curD=d; else if(e==="동량") curD="";
@@ -224,11 +227,11 @@ function parseProd(text){
     if(!Dn||/계$/.test(Dn)||/계$/.test(Cn)&&!d) continue;
     const kind=/OEM/i.test(Bn)?"OEM":(/자체/.test(Bn)?"자체":null); if(!kind) continue;
     const x=(g[Dn]=g[Dn]||{자체:{q:Array(14).fill(0),a:Array(14).fill(0)},OEM:{q:Array(14).fill(0),a:Array(14).fill(0)}});
-    const vals=cols.map(ci=>nz(r[ci])); const key=e==="동량"?"q":"a";
+    const vals=cols.map(ci=>nz(r[ci])); const key=e==="동량"?"q":"a"; if(key==="q") cols.forEach(ci=>dq.add(r[ci]));
     vals.forEach((v,j)=>{x[kind][key][j]+=v; if(kind==="자체"&&key==="q") tot[j]+=v;}); n++;
   }
   if(!n) return {error:"생산/자체·생산/OEM 데이터 행을 찾지 못했습니다."};
-  return {g,tot,n};
+  return {g,tot,n,dq};
 }
 /* --- 재료비동가 --- */
 function parseBasis(text){
@@ -241,10 +244,11 @@ function parseBasis(text){
   const mcol=[]; H.forEach((t,c)=>{const mm=t.match(/^(\d{1,2})월$/); if(mm&&c>c12&&mcol[+mm[1]-1]==null) mcol[+mm[1]-1]=c;});
   const ci=H.indexOf("항목"), gi=H.indexOf("구분");
   if(ci<0||mcol.filter(x=>x!=null).length<12) return {error:"'항목' 열 또는 1~12월 열을 찾지 못했습니다."};
-  const cols=[c11,c12,...mcol], v={}; let grp="";
+  const cols=[c11,c12,...mcol], v={}; let grp=""; const dqB=decTrack();
   for(let i=hr+1;i<raw.length;i++){
     const r=raw[i]; const gg=gi>=0?norm(r[gi]):""; if(gg) grp=gg.replace(/\s/g,"").toUpperCase(); const it=norm(r[ci]); if(!it) continue;
     const vals=cols.map(c=>{const x=parseNum(r[c]);return x==null||isNaN(x)?null:x;});
+    if(/^(제품 총동량|선물잔량)/.test(it)) cols.forEach(c=>dqB.add(r[c]));
     let k=null;
     if(it.startsWith("제품 총동량")) k="tot";
     else if(it.startsWith("환율")) k="fx";
@@ -257,7 +261,7 @@ function parseBasis(text){
   const need=["sq","sl","sp","jq","jl","jp","nl","fx"].filter(k=>!v[k]);
   if(need.length) return {error:"항목을 찾지 못함: "+need.map(k=>({sq:"SCR 선물잔량",sl:"SCR 선물LME",sp:"SCR 프리미엄",jq:"JCR 선물잔량",jl:"JCR 선물LME",jp:"JCR 프리미엄",nl:"비선물 LME",fx:"환율"}[k])).join(", ")};
   if(target==null) return {error:"목표 프리미엄 값을 찾지 못했습니다 (2행부터 붙여넣으세요)."};
-  return {v,target};
+  return {v,target,dq:dqB};
 }
 /* --- 상품재료비율 --- */
 function parseRatio(text){
@@ -280,13 +284,13 @@ function parseCoef(text){
   const cg=H.indexOf("제품군"), cd=H.indexOf("상세"), cc=H.findIndex(x=>x.endsWith("거래선")), cu=H.indexOf("통화");
   const cw=H.findIndex(x=>x.startsWith("포장비"));   // 포장비 계수 (백만원/톤, 행별)
   if([cs,ct,cg,cd,cc,cu].some(x=>x<0)) return {error:"제품군·상세·영업거래선·통화·세선·태선 머리글을 모두 찾지 못했습니다."};
-  const m={}; let n=0, blank=0;
+  const m={}; let n=0, blank=0; const dc=decTrack(), dp=decTrack();
   const num=v=>{const x=parseNum(v);return x==null||isNaN(x)?null:x;};
   for(let i=hr+2;i<raw.length;i++){const r=raw[i]; if(!norm(r[cg])) continue;
     const key=nk(r[cg])+"|"+nk(r[cd])+"|"+nk(r[cc])+"|"+nk(r[cu]);
-    m[key]={s:num(r[cs]),t:num(r[ct]),p:cw>=0?num(r[cw]):null}; n++; if(m[key].s==null&&m[key].t==null) blank++;}
+    m[key]={s:num(r[cs]),t:num(r[ct]),p:cw>=0?num(r[cw]):null}; n++; dc.add(r[cs]); dc.add(r[ct]); if(cw>=0) dp.add(r[cw]); if(m[key].s==null&&m[key].t==null) blank++;}
   const pv=[...new Set(Object.values(m).map(x=>x.p).filter(x=>x!=null).map(x=>+x.toFixed(4)))];
-  return {m,n,blank,hasPack:cw>=0,packVals:pv};
+  return {m,n,blank,hasPack:cw>=0,packVals:pv,dc,dp};
 }
 /* --- 계산 --- */
 function compute(){
@@ -302,6 +306,11 @@ function compute(){
   if(!P) add("warn","생산계획","붙여넣지 않았습니다 → 상품(OEM) 없음으로 계산, 제품 총동량은 재료비동가 시트 값 사용");
   if(!CF) add("warn","동량지수_부재료비","붙여넣지 않았습니다 → 제품 부재료비 0");
   if(!RT) add("warn","상품재료비율","붙여넣지 않았습니다 → 상품 재료비 0");
+  const precMsg=(where,trk,need,what)=>{ if(!trk||!trk.n||trk.max>=need) return;
+    add(trk.max===0?"err":"warn",where,what+"이(가) 소수 "+trk.max+"자리까지만 붙여넣어졌습니다 – 엑셀은 화면에 표시된 값만 복사합니다. 해당 칸 셀 서식을 소수 "+need+"자리 이상(예: #,##0."+"0".repeat(need)+")으로 바꾼 뒤 다시 복사하세요.");};
+  if(P&&!P.error) precMsg("생산계획",P.dq,3,"생산계획 동량");
+  if(B&&!B.error) precMsg("재료비동가",B.dq,3,"제품 총동량·선물잔량");
+  if(CF&&!CF.error){ precMsg("동량지수_부재료비",CF.dc,4,"세·태선 부재료비 계수"); precMsg("동량지수_부재료비",CF.dp,4,"포장비 계수"); }
   if(!B||B.error) return R;
   const Pg=P&&!P.error?P.g:{}, coefM=CF&&!CF.error?CF.m:{}, ratM=RT&&!RT.error?RT.m:{};
   // 1) 적용동가

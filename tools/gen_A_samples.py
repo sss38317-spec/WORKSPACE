@@ -76,12 +76,12 @@ bas[-2][2]="매입동가"
 bas.insert(len(bas)-2, br("","환율","원/$",fx))
 # ---- 상품재료비율
 RAT={'상선용':0.85,'해양용':0.80,'이동용':0.78,'전력용':0.82}
-PACKW=0.303   # 포장비 계수 (백만원/톤) – 사용자 기준양식처럼 전 행 일괄값
+PACKW=0.303089   # 포장비 계수 (백만원/톤) – 사용자 기준양식처럼 전 행 일괄값
 # 상품재료비율 (사용자 수정 양식: 3행 머리글, 4행 매출액·재료비 보조 머리글, 5행부터 값)
 rat=[["","제품군","상품재료비율","산출 기준 (예: 26년 1~10월 실적)","","비고"],["","","","매출액","재료비",""]]+[["",k,v,"","",""] for k,v in RAT.items()]
 # ---- 동량지수_부재료비 (사용자 수정 양식: B~R 영업 동량지수 구조, T~V 부재료비 계수, W 포장비 계수)
 ix=openpyxl.load_workbook(f'{S}/src/sales.xlsx',data_only=False)['동량지수_1~9월 매출품목']
-COEF={'JIS':(4.2,2.6),'XLPE':(3.9,2.4),'NEK':(4.5,2.9),'TYPE P':(4.0,2.5),'MIL':(5.0,3.0)}
+COEF={'JIS':(4.2137,2.6058),'XLPE':(3.9124,2.4381),'NEK':(4.5212,2.9067),'TYPE P':(4.0453,2.5179),'MIL':(5.0318,3.0246)}
 coef=[]
 for r in range(10,ix.max_row+1):
     row=[]
@@ -93,7 +93,7 @@ for r in range(10,ix.max_row+1):
     if r==10: row[19]="부재료비 계수 (백만원/톤)"; row[22]="포장비 계수"
     if r==11: row[19]="TOTAL"; row[20]="세선"; row[21]="태선"
     if r>=12 and ix.cell(r,3).value:
-        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0,2.5)); row[20]=cs; row[21]=ct; row[19]=round((cs+ct)/2,3); row[22]=PACKW
+        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0123,2.5321)); row[20]=cs; row[21]=ct; row[19]=round((cs+ct)/2,3); row[22]=PACKW
     if any(str(x).strip() for x in row): coef.append(row)
 def coefOf(g,det,cust,cur):
     for row in coef[2:]:
