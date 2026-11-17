@@ -59,6 +59,7 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 .muted{color:var(--muted)}
 td.inp{background:var(--input);padding:0}td.inp input{width:84px;border:0;background:transparent;text-align:right;font:inherit;color:var(--accent);padding:3px 6px}
 td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:700;color:var(--warn)}
+.kpi .v .sh{font-size:13px;font-weight:600;color:var(--muted);margin-left:4px}.kpi .v.sm{font-size:15px;line-height:1.45}.kpi .v .lb{font-size:12px;font-weight:600;color:var(--muted);margin-right:2px}
 .kpi .d{font-size:12px;font-variant-numeric:tabular-nums}.kpi .d.up{color:var(--err)}.kpi .d.dn{color:var(--ok)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.on{opacity:.95}
@@ -544,14 +545,17 @@ function render(){
     return line("매출 동량",x.sq,2)+line("생산 동량(자체+OEM)",x.pq,2)+line("  └ OEM 동량",x.oq,2)+line("동량 차이",dq,2)+line("매출 금액",x.sa,1)+line("생산 금액(자체+OEM)",x.pa,1)+line("  └ OEM 금액",x.oa,1)+line("금액 차이",da,1);}).join("");
   renderReport(); renderDetail(); bindEdits(); renderWhatIf(); renderAdj();
 }
-function totalsOf(R){let a=0,q=0,cu=0,sub=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;cu+=x.cuT;sub+=x.subT;}));return {a,q,cu,sub,sum:cu+sub,rate:a?(cu+sub)/a:0};}
+function totalsOf(R){let a=0,q=0,pq=0,mq=0,cu=0,sub=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;pq+=x.pq;mq+=x.mq;cu+=x.cuT;sub+=x.subT;}));return {a,q,pq,mq,cu,sub,sum:cu+sub,rate:a?(cu+sub)/a:0};}
+const shr=(v,base)=>`<span class="sh">(${base?(v/base*100).toFixed(1):"0.0"}%)</span>`;
 function renderWhatIf(){
   const n=ovrCount(); document.querySelectorAll(".ovrReset").forEach(b=>{b.textContent=`수정 ${n}칸 · 모두 되돌리기`;b.disabled=!n;});
   $("tgt").value=RES.target; $("tgtInfo").textContent=state.ovr.target!=null?`(붙여넣은 값 ${fmt(B.target)} → 수정)`:"(붙여넣은 값)";
   const T=totalsOf(RES), B0=BASE?totalsOf(BASE):null;
-  const card=(l,k,dec,pct)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
-    return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
-  const h=card("매출액 (백만원)","a",0)+card("동량 (톤)","q",3)+card("동재료비","cu",1)+card("부재료비","sub",1)+card("재료비합","sum",1)+card("재료비율","rate",0,true);
+  const card=(l,k,dec,pct,base)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
+    return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}${base?shr(v,T[base]):""}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
+  const qd=B0?`<div class="d muted">수정 전 제품 ${fmt(B0.pq,1)} / 상품 ${fmt(B0.mq,1)}</div>`:'<div class="d muted">전체 동량 대비 비중</div>';
+  const qcard=`<div class="kpi"><div class="l">제품 / 상품 동량 (톤)</div><div class="v sm"><span class="lb">제품</span> ${fmt(T.pq,1)}${shr(T.pq,T.q)}<br><span class="lb">상품</span> ${fmt(T.mq,1)}${shr(T.mq,T.q)}</div>${qd}</div>`;
+  const h=card("매출액 (백만원)","a",0)+card("동량 (톤)","q",3)+qcard+card("동재료비","cu",1,false,"a")+card("부재료비","sub",1,false,"a")+card("재료비합","sum",1,false,"a")+card("재료비율","rate",0,true);
   $("wi-cu").innerHTML=h; $("wi-det").innerHTML=h; $("wi-adj").innerHTML=h;
 }
 function renderAdj(){
@@ -604,8 +608,10 @@ function renderReport(){
   const gl=[...new Set(R.rows.map(r=>norm(r.row.cells[COL.제품군])))]; const sg=$("repG"); const pv=sg.value;
   sg.innerHTML='<option value="">전체</option>'+gl.map(g=>`<option>${esc(g)}</option>`).join(""); sg.value=gl.includes(pv)?pv:"";
   const tot=REP[REP.length-1]; const Y=(b,k)=>lineVal(b,k,"Y");
-  $("kpis").innerHTML=[["매출액 (백만원)",fmt(Y(tot.T,"a"))],["동량 계 (톤)",fmt(Y(tot.T,"q"),1)],["제품 / 상품 동량",fmt(Y(tot.P,"q"),1)+" / "+fmt(Y(tot.M,"q"),1)],["동재료비",fmt(Y(tot.T,"cu"))],["부재료비",fmt(Y(tot.T,"sub"))],["재료비합",fmt(Y(tot.T,"sum"))],["재료비율",fmtL("rate",Y(tot.T,"rate"))]]
-    .map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+  const TA=Y(tot.T,"a"), TQ=Y(tot.T,"q");
+  $("kpis").innerHTML=[["매출액 (백만원)",fmt(TA)],["동량 계 (톤)",fmt(TQ,1)],["제품 / 상품 동량 (톤)",'<span class="lb">제품</span> '+fmt(Y(tot.P,"q"),1)+shr(Y(tot.P,"q"),TQ)+'<br><span class="lb">상품</span> '+fmt(Y(tot.M,"q"),1)+shr(Y(tot.M,"q"),TQ),"sm"],
+    ["동재료비",fmt(Y(tot.T,"cu"))+shr(Y(tot.T,"cu"),TA)],["부재료비",fmt(Y(tot.T,"sub"))+shr(Y(tot.T,"sub"),TA)],["재료비합",fmt(Y(tot.T,"sum"))+shr(Y(tot.T,"sum"),TA)],["재료비율",fmtL("rate",Y(tot.T,"rate"))]]
+    .map(([l,v,c])=>`<div class="kpi"><div class="l">${l}</div><div class="v${c?" "+c:""}">${v}</div></div>`).join("");
   const ms=view==="year"?["Y"]:[...MONTHS.map((_,m)=>m),"Y"]; const ml=m=>m==="Y"?"연간":(m+1)+"월";
   let h=`<tr><th rowspan="2">제품군</th><th rowspan="2">상세분류</th><th rowspan="2">거래처</th><th rowspan="2">부서</th><th rowspan="2">구분</th><th colspan="${ms.length}">매출 전체</th><th class="p" colspan="${ms.length}">제품 (동재료비·부재료비)</th><th class="m" colspan="${ms.length}">상품 (동재료비 + 부재료비)</th></tr><tr>`+
     ms.map(m=>`<th>${ml(m)}</th>`).join("")+ms.map(m=>`<th class="p">${ml(m)}</th>`).join("")+ms.map(m=>`<th class="m">${ml(m)}</th>`).join("")+"</tr>";
