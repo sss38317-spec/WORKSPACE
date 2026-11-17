@@ -82,6 +82,17 @@ const XLSX_W=(()=>{
   return {Styles,Sheet,book};
 })();
 
+// 열 너비: 머리글(줄바꿈 고려)과 값의 표시 길이 기준 (한글 2칸), 최소 6 · 최대 40
+function autoWidth(S,hdrRows,r1,r2){
+  const w=t=>{let n=0;for(const ch of String(t))n+=/[ᄀ-ᇿ㄰-㆏가-힯一-鿿]/.test(ch)?2:1;return n;};
+  const need={};
+  const merged=new Set(); S.merges.forEach(m=>{const [a,b]=m.split(":");if(a.replace(/\d+/g,"")!==b.replace(/\d+/g,"")) merged.add(a);});  // 가로 병합(월·영역 제목)은 제외
+  hdrRows.forEach(r=>{const row=S.rows[r]||{};for(const c in row){const v=row[c].v;if(v==null||v==="")continue;if(merged.has(colName(+c)+r))continue;
+    const lines=String(v).split(/\n/);const longest=Math.max(...lines.map(w));need[c]=Math.max(need[c]||0,Math.min(longest,24)/ (longest>12?1.6:1)+2);}});
+  for(let r=r1;r<=r2;r++){const row=S.rows[r]||{};for(const c in row){const v=row[c].v;if(v==null||v==="")continue;
+    const t=typeof v==="number"?(Math.abs(v)>=1e6?"-0,000,000.0":(Math.abs(v)>=1e3?"-000,000.0":"-000.000")):String(v);need[c]=Math.max(need[c]||0,w(t)+1);}}
+  for(const c in need) S.cols[c]=Math.max(6,Math.min(40,Math.ceil(need[c]*1.1)));
+}
 function buildWorkbook(){
   const R=RES, ST=XLSX_W.Styles(), st=ST.get, C=colName;
   const H=st({font:"b",fill:"hdr",al:"center",wrap:1}), HP=st({font:"b",fill:"prodH",al:"center",wrap:1}), HM=st({font:"b",fill:"merchH",al:"center",wrap:1});
@@ -107,7 +118,7 @@ function buildWorkbook(){
       if(k==="bp"){f=`${ref("ll")}*${ref("fx")}/1000`;v=cx.bp||0;}
       if(k==="ap"){ if(i===0){A.set(r,c,"",NUM(fmt,{fill:"key",font:"b"}));return;} f=`${C(c-1)}${AR.bp}`;v=R.cu[i-1].bp||0;}
       A.set(r,c,v,NUM(fmt,{fill:(k==="bp"||k==="ap")?"key":undefined,font:(k==="bp"||k==="ap")?"b":"n"}),f);});});
-  A.cols={1:28,2:7}; for(let i=0;i<14;i++)A.cols[3+i]=11; A.freeze=[5,3];
+  autoWidth(A,[4],5,AR.ap); A.cols[1]=Math.max(A.cols[1],30); A.heights[4]=20; A.freeze=[5,3];
   A.set(AR.ap+2,1,"※ 노란 칸 = 입력값(HTML에 붙여넣은 값), 나머지는 수식. 상세 시트의 적용동가는 이 시트 적용동가 행을 참조합니다.",NOTE);
   const apRef=m=>`'적용동가'!$${C(3+m+2)}$${AR.ap}`;   // 27년 m월 → 적용동가 시트 열: 26.11(C), 26.12(D), 1월(E)...
   // ---------- 2) 상세 (수식) ----------
@@ -120,8 +131,8 @@ function buildWorkbook(){
   const YB=MB+12*MWD, yc=k=>YB+YK.indexOf(k);
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
-  FR.forEach((f,i)=>{D.set(3,1+i,"",H);D.set(4,1+i,f[0],H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
-  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
+  FR.forEach((f,i)=>{D.set(3,1+i,f[0],H);D.set(4,1+i,"",H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
+  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,l,H);D.set(4,c,"",H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
     DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품재료비"].includes(k)?HM:(["제품동량","제품매출","제품부재료비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
@@ -154,7 +165,7 @@ function buildWorkbook(){
     YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
       D.set(r,c2,yv[k],NUM(["동량","상품동량","제품동량"].includes(k)?"n2":"n1",{fill:"sub"}),MONTHS.map((_,m)=>C(mc(m,k))+r).join("+"));});
   });
-  D.cols={1:6,2:7,3:6,4:7,5:9,6:14,7:8,8:16}; for(let c=9;c<=YB+YK.length;c++) if(!D.cols[c]) D.cols[c]=10;
+  autoWidth(D,[3,4],5,rN); D.cols[cS]=Math.max(D.cols[cS]||0,17); D.cols[cT]=Math.max(D.cols[cT]||0,17); D.cols[cW]=Math.max(D.cols[cW]||0,18); D.cols[cX]=Math.max(D.cols[cX]||0,15); D.heights[3]=30; D.heights[4]=42;
   D.freeze=[5,7]; D.filter=`A4:${C(YB+YK.length-1)}${Math.max(rN,4)}`;
   // ---------- 3) 상품배분 ----------
   const PBs=XLSX_W.Sheet("상품배분");
@@ -169,7 +180,7 @@ function buildWorkbook(){
       MONTHS.forEach((_,m)=>PBs.set(r,3+m,fn(m),NUM(fmt,ff?{}:{fill:"inp"}),ff?ff(m):null));
       PBs.set(r,15,sumA(MONTHS.map((_,m)=>fn(m))),NUM(fmt,{fill:"sub"}),`SUM(C${r}:N${r})`);});
     pr+=5;});
-  PBs.cols={1:10,2:14};for(let c=3;c<=15;c++)PBs.cols[c]=10;PBs.freeze=[4,3];
+  autoWidth(PBs,[3],4,pr-1); PBs.heights[3]=20; PBs.freeze=[4,3];
   PBs.set(pr,1,"※ 매출 동량·금액 = 상세 시트 SUMIF(수식), OEM 동량·금액 = 생산계획 생산/OEM(입력값), 상품재료비율(상세제품군)·포장비 계수 = 상세 시트 입력값 열",NOTE);
   // ---------- 4) 보고양식 (SUMIFS 수식) ----------
   const Rp=XLSX_W.Sheet("보고양식"); const rep=buildReport(R);
@@ -202,7 +213,7 @@ function buildWorkbook(){
             if(!srcK) f="0"; else {const sc=rng(mc(m,srcK)); f=crit.length?`SUMIFS(${sc},${crit.map(([cc,val])=>`${rng(cc)},"${String(val).replace(/"/g,'""')}"`).join(",")})`:`SUM(${sc})`;}}
           Rp.set(r,c,v,NUM(fmt,{fill:sfill,font,top}),f);}});});
     rr+=LINES.length;});
-  Rp.cols={1:9,2:10,3:14,4:6,5:9};for(let c=6;c<6+3*W;c++)Rp.cols[c]=10;
+  autoWidth(Rp,[3,4],5,rr-1); for(let c=6;c<6+3*W;c++) Rp.cols[c]=Math.max(Rp.cols[c]||0,11); Rp.heights[3]=24; Rp.heights[4]=20;
   Rp.freeze=[5,6]; Rp.filter=`A4:${C(5+3*W)}${rr-1}`;
   Rp.set(rr+1,1,"※ 금액·동량·동재료비·부재료비 = 상세 시트 SUMIFS(제품군·상세·거래처·부서), 톤당단가·재료비합·재료비율·연간 = 수식",NOTE);
   sheets.unshift(Rp); sheets.push(D,PBs);
