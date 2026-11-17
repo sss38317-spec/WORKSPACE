@@ -115,7 +115,7 @@ def coefOf(g,det,cust,cur):
     return None
 # ---- 기대값 (Python 독립 계산)
 apply=[bp[m+1] for m in range(12)]
-tot={'q':0,'a':0,'cu':0,'sub':0,'pq':0,'mq':0,'ma':0,'msub':0,'ppk':0,'psub':0}
+tot={'q':0,'a':0,'cu':0,'sub':0,'pq':0,'mq':0,'ma':0,'mm':0,'ppk':0,'psub':0}
 for d in sales:
     if d['biz']!='선박선': continue
     tt=coefOf(d['g'],d['det'],d['cust'],d['cur'])
@@ -124,9 +124,9 @@ for d in sales:
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
         pq=q-oq; unit=tt   # 세·태선 비중 미사용, 포장비 별도
-        mcu=oq*apply[m]/1000; msub=oa*ratOf(g,d['det'])-mcu   # 상품: 동재료비 = 상품 동량×적용동가, 부재료비 = 상품 매출×비율 − 상품 동재료비
-        cu=pq*apply[m]/1000+mcu; sub=pq*unit+pq*PACKW+msub; tot['ppk']+=pq*PACKW; tot['psub']+=pq*unit
-        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=msub
+        mm=oa*ratOf(g,d['det'])   # 상품재료비 = 상품 매출 × 상품재료비율 (한 줄)
+        cu=pq*apply[m]/1000; sub=pq*unit+pq*PACKW; tot['ppk']+=pq*PACKW; tot['psub']+=pq*unit
+        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['mm']+=mm
 tsv=lambda rr: "\n".join("\t".join(('"'+str(x).replace('"','""')+'"') if any(ch in str(x) for ch in '\t\n"') else str(x) for x in r) for r in rr)
 out={'sales':tsv([*hdr,*rows]),'prod':tsv(prod),'basis':tsv(bas),'ratio':tsv(rat),'coef':tsv(coef)}
 json.dump(out,open(f'{S}/A_samples.json','w'),ensure_ascii=False)

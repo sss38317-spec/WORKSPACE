@@ -125,17 +125,17 @@ function buildWorkbook(){
   const D=XLSX_W.Sheet("상세");
   const FR=[["엑셀행",null],...FRONT.map(f=>[f[1],f[0]])]; // A~R
   const cS=FR.length+1, cU=cS+1, cV=cS+2, cW=cS+3, cX=cS+4, MB=cS+5;   // 일괄 부재료비 단가(S), 상품재료비율, 포장비단가, 가산, 목표, 월 블록 시작
-  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비조정","제품동재료비","상품동재료비","동재료비","제품부재료비","포장비","상품부재료비","부재료비","재료비합","재료비율"];
+  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비조정","동재료비","제품부재료비","포장비","부재료비","상품재료비","재료비합","재료비율"];
   const MWD=DK.length;
   const mc=(m,k)=>MB+m*MWD+DK.indexOf(k);
-  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비조정","제품동재료비","상품동재료비","동재료비","제품부재료비","포장비","상품부재료비","부재료비","재료비합","재료비율"];
+  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비조정","동재료비","제품부재료비","포장비","부재료비","상품재료비","재료비합","재료비율"];
   const YB=MB+12*MWD, yc=k=>YB+YK.indexOf(k);
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
   FR.forEach((f,i)=>{D.set(3,1+i,f[0],H);D.set(4,1+i,"",H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
   [[cS,"부재료비 단가(일괄)"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,l,H);D.set(4,c,"",H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
-    DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품동재료비","상품부재료비"].includes(k)?HM:(["제품동량","제품매출","제품동재료비","제품부재료비","포장비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
+    DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품재료비"].includes(k)?HM:(["제품동량","제품매출","제품부재료비","포장비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
   const rng=c=>`'상세'!$${C(c)}$${r0}:$${C(c)}$${Math.max(rN,r0)}`;
   const PB="'상품배분'";
@@ -156,17 +156,15 @@ function buildWorkbook(){
       D.set(r,mc(m,"적용동가"),x.price||0,NUM("n1"),apRef(m));
       D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`$${C(cS)}${r}`);
       D.set(r,mc(m,"동재료비조정"),x.adj||0,NUM("n1",{fill:x.adj?"key":undefined}),`IF(N($${C(cX)}${r})>0,${ref("매출액")}*$${C(cX)}${r}-(${ref("제품동량")}*${ref("적용동가")}/1000+${ref("제품부재료비")}+${ref("포장비")}+${ref("상품매출")}*$${C(cU)}${r}),${ref("매출액")}*N($${C(cW)}${r}))`);
-      D.set(r,mc(m,"제품동재료비"),x.pcu,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*${ref("적용동가")}/1000+${ref("동재료비조정")}`);
-      D.set(r,mc(m,"상품동재료비"),x.mcu,NUM("n1",{fill:"merch"}),`${ref("상품동량")}*${ref("적용동가")}/1000`);
-      D.set(r,mc(m,"동재료비"),x.pcu+x.mcu,NUM("n1"),`${ref("제품동재료비")}+${ref("상품동재료비")}`);
+      D.set(r,mc(m,"동재료비"),x.cuT,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000+${ref("동재료비조정")}`);
       D.set(r,mc(m,"제품부재료비"),x.psub,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*${ref("부재료비단가")}`);
       D.set(r,mc(m,"포장비"),x.ppk,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*$${C(cV)}${r}`);
-      D.set(r,mc(m,"상품부재료비"),x.msub,NUM("n1",{fill:"merch"}),`${ref("상품매출")}*$${C(cU)}${r}-${ref("상품동재료비")}`);
-      D.set(r,mc(m,"부재료비"),x.subT,NUM("n1"),`${ref("제품부재료비")}+${ref("포장비")}+${ref("상품부재료비")}`);
-      D.set(r,mc(m,"재료비합"),x.cuT+x.subT,NUM("n1",{font:"b"}),`${ref("동재료비")}+${ref("부재료비")}`);
-      D.set(r,mc(m,"재료비율"),x.a?(x.cuT+x.subT)/x.a:0,NUM("pct"),`IFERROR(${ref("재료비합")}/${ref("매출액")},0)`);});
-    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비조정:y.adj||0,제품동재료비:y.pcu,상품동재료비:y.mcu,동재료비:y.cuT,제품부재료비:y.psub,포장비:y.ppk,상품부재료비:y.msub,부재료비:y.subT,재료비합:y.cuT+y.subT};
-    YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
+      D.set(r,mc(m,"부재료비"),x.subT,NUM("n1"),`${ref("제품부재료비")}+${ref("포장비")}`);
+      D.set(r,mc(m,"상품재료비"),x.mtot,NUM("n1",{fill:"merch"}),`${ref("상품매출")}*$${C(cU)}${r}`);
+      D.set(r,mc(m,"재료비합"),x.cuT+x.subT+x.mtot,NUM("n1",{font:"b"}),`${ref("동재료비")}+${ref("부재료비")}+${ref("상품재료비")}`);
+      D.set(r,mc(m,"재료비율"),x.a?(x.cuT+x.subT+x.mtot)/x.a:0,NUM("pct"),`IFERROR(${ref("재료비합")}/${ref("매출액")},0)`);});
+    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비조정:y.adj||0,동재료비:y.cuT,제품부재료비:y.psub,포장비:y.ppk,부재료비:y.subT,상품재료비:y.mtot,재료비합:y.cuT+y.subT+y.mtot};
+    YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT+y.mtot)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
       D.set(r,c2,yv[k],NUM(["동량","상품동량","제품동량"].includes(k)?"n2":"n1",{fill:"sub"}),MONTHS.map((_,m)=>C(mc(m,k))+r).join("+"));});
   });
   autoWidth(D,[3,4],5,rN); D.cols[cS]=Math.max(D.cols[cS]||0,17); D.cols[cW]=Math.max(D.cols[cW]||0,18); D.cols[cX]=Math.max(D.cols[cX]||0,15); D.heights[3]=30; D.heights[4]=42;
@@ -189,12 +187,12 @@ function buildWorkbook(){
   // ---------- 4) 보고양식 (SUMIFS 수식) ----------
   const Rp=XLSX_W.Sheet("보고양식"); const rep=buildReport(R);
   Rp.set(1,1,"연간 매출 / 재료비 TOTAL"+(state.verName?" – "+state.verName:""),T); Rp.set(2,1,"(단위: 금액·재료비 백만원 / 동량 톤 / 톤당단가 백만원/톤)",NOTE);
-  const SEC=[["T","매출 전체",H],["P","제품 (동재료비·부재료비)",HP],["M","상품 (동재료비 + 부재료비)",HM]], W=13;
+  const SEC=[["T","매출 전체",H],["P","제품 (동재료비·부재료비)",HP],["M","상품 (상품재료비 = 금액 × 상품재료비율)",HM]], W=13;
   ["제품군","상세분류","거래처","부서","구분"].forEach((l,i)=>{Rp.set(3,1+i,l,H);Rp.set(4,1+i,"",H);Rp.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
   SEC.forEach(([k,l,hs],si)=>{const c0=6+si*W;Rp.set(3,c0,l,hs);for(let j=1;j<W;j++)Rp.set(3,c0+j,"",hs);Rp.merges.push(`${C(c0)}3:${C(c0+W-1)}3`);
     MONTHS.forEach((m,i)=>Rp.set(4,c0+i,m,hs));Rp.set(4,c0+12,"연간",hs);});
   // 상세 열 매핑: 영역별 금액/동량/동재료비/부재료비
-  const SRC={T:{a:"매출액",q:"동량",cu:"동재료비",sub:"부재료비"},P:{a:"제품매출",q:"제품동량",cu:"제품동재료비",sub:["제품부재료비","포장비"]},M:{a:"상품매출",q:"상품동량",cu:"상품동재료비",sub:"상품부재료비"}};
+  const SRC={T:{a:"매출액",q:"동량",cu:"동재료비",sub:"부재료비",mm:"상품재료비"},P:{a:"제품매출",q:"제품동량",cu:"동재료비",sub:"부재료비",mm:null},M:{a:"상품매출",q:"상품동량",cu:null,sub:null,mm:"상품재료비"}};
   let rr=5;
   rep.forEach(g=>{const lvl=g.type, crit=[];
     if(lvl==="cust") crit.push([4,g.k[0]],[5,g.k[1]],[6,g.k[2]],[3,g.k[3]]);
@@ -210,16 +208,16 @@ function buildWorkbook(){
           const fmt=key==="rate"?"pct":(key==="q"||key==="up"?"n2":"n1"), sfill=fill||(sk==="P"?"prod":(sk==="M"?"merch":undefined));
           let f=null;
           if(key==="up") f=`IFERROR(${L}${base}/${L}${base+1},0)`;
-          else if(key==="sum") f=`${L}${base+3}+${L}${base+4}`;
-          else if(key==="rate") f=`IFERROR(${L}${base+5}/${L}${base},0)`;
+          else if(key==="sum") f=`${L}${base+3}+${L}${base+4}+${L}${base+5}`;
+          else if(key==="rate") f=`IFERROR(${L}${base+6}/${L}${base},0)`;
           else if(yr) f=`SUM(${C(c0)}${r}:${C(c0+11)}${r})`;
-          else {const srcK=SRC[sk][key==="a"?"a":(key==="q"?"q":(key==="cu"?"cu":"sub"))];
+          else {const srcK=SRC[sk][key];
             if(!srcK) f="0"; else {const one=k1=>{const sc=rng(mc(m,k1)); return crit.length?`SUMIFS(${sc},${crit.map(([cc,val])=>`${rng(cc)},"${String(val).replace(/"/g,'""')}"`).join(",")})`:`SUM(${sc})`;}; f=[].concat(srcK).map(one).join("+");}}
           Rp.set(r,c,v,NUM(fmt,{fill:sfill,font,top}),f);}});});
     rr+=LINES.length;});
   autoWidth(Rp,[3,4],5,rr-1); for(let c=6;c<6+3*W;c++) Rp.cols[c]=Math.max(Rp.cols[c]||0,11); Rp.heights[3]=24; Rp.heights[4]=20;
   Rp.freeze=[5,6]; Rp.filter=`A4:${C(5+3*W)}${rr-1}`;
-  Rp.set(rr+1,1,"※ 금액·동량·동재료비·부재료비 = 상세 시트 SUMIFS(제품군·상세·거래처·부서), 톤당단가·재료비합·재료비율·연간 = 수식",NOTE);
+  Rp.set(rr+1,1,"※ 금액·동량·동재료비·부재료비·상품재료비 = 상세 시트 SUMIFS(제품군·상세·거래처·부서), 톤당단가·재료비합·재료비율·연간 = 수식",NOTE);
   sheets.unshift(Rp); sheets.push(D,PBs);
   // 시트 순서: 보고양식, 적용동가, 상세, 상품배분
   return XLSX_W.book(sheets,ST);
@@ -230,7 +228,7 @@ function htmlReport(){ // 서식 유지 복사용 HTML (값)
   const bd="border:.5pt solid #BFBFBF;font-family:'맑은 고딕';font-size:9pt;";
   const nf=key=>key==="rate"?"0.0%":(key==="q"||key==="up"?"#,##0.00":"#,##0.0");
   let h=`<table style="border-collapse:collapse"><tr>${["제품군","상세분류","거래처","부서","구분"].map(l=>`<th rowspan="2" style="${bd}background:${css.hdr}">${l}</th>`).join("")}`+
-    `<th colspan="13" style="${bd}background:${css.hdr}">매출 전체</th><th colspan="13" style="${bd}background:${css.PH}">제품 (동재료비·부재료비)</th><th colspan="13" style="${bd}background:${css.MH}">상품 (동재료비 + 부재료비)</th></tr><tr>`+
+    `<th colspan="13" style="${bd}background:${css.hdr}">매출 전체</th><th colspan="13" style="${bd}background:${css.PH}">제품 (동재료비·부재료비)</th><th colspan="13" style="${bd}background:${css.MH}">상품 (상품재료비 = 금액 × 상품재료비율)</th></tr><tr>`+
     [css.hdr,css.PH,css.MH].map(bg=>ms.map(m=>`<th style="${bd}background:${bg}">${ml(m)}</th>`).join("")).join("")+"</tr>";
   REP.forEach(x=>LINES.forEach(([lab,key],li)=>{const bg=x.type==="cust"?"":(x.type==="grand"?css.grand:css.sub), fw=x.type==="cust"?"":"font-weight:bold;", top=li===0?"border-top:1.5pt solid #808080;":"";
     const td=(v,b2)=>`<td style="${bd}${top}${fw}background:${bg||b2||"#FFFFFF"}">${esc(v)}</td>`;
