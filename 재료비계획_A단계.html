@@ -391,6 +391,15 @@ const nz=v=>{const x=parseNum(v);return x==null||isNaN(x)?0:x;};
 const nk=v=>norm(v).replace(/\s/g,"").toUpperCase();
 const sumA=a=>a.reduce((s,x)=>s+(x||0),0);
 const pq0=(q,a)=>!!(q||a);
+// 조정 항목 이름 비교: 공백·하이픈·밑줄·슬래시·점·대소문자 무시 (MV-105 = MV105 = mv 105)
+const nkx=v=>nk(v).replace(/[-_\/.·]/g,"");
+function adjWhy(s){
+  if(s.rows&&!s.a) return "해당 행 매출액이 모두 0";
+  if(s.dup) return "같은 상세제품군 항목이 위에 있음 (중복)";
+  if(s.other) return "사업부 '"+[...s.biz].join(", ")+"' 행이라 계산 대상(선박선)이 아님";
+  if(s.detG&&s.detG.size) return "이 상세제품군은 제품군 '"+[...s.detG].join(", ")+"'에 있음 – 제품군을 바꾸세요";
+  return "매출계획(선박선)에 이 제품군·상세제품군 행이 없음 – 이름을 확인하세요";
+}
 // 붙여넣은 글자의 소수 자릿수 (엑셀은 표시된 값만 복사 → 서식 때문에 잘렸는지 확인)
 const decs=v=>{const t=String(v??"").trim().replace(/[,\s]/g,"");const m=t.match(/\.(\d+)/);return m?m[1].length:0;};
 function decTrack(){const o={max:0,n:0};o.add=v=>{const x=parseNum(v);if(x!=null&&!isNaN(x)&&x!==0){o.n++;o.max=Math.max(o.max,decs(v));}};return o;}
@@ -609,9 +618,14 @@ function compute(useOvr=true){
     return {row,key,cf,rat,ratSrc:rf.src,mon};
   });
   // 재료비율 조정: 증가분 전액 동재료비
-  const ADJ=state.adj||[]; R.adjStat=ADJ.map(()=>({rows:0,a:0,cu:0,sub:0,extra:0}));
-  R.rows.forEach(rw=>{const c=rw.row.cells, g=nk(c[COL.제품군]), d=nk(c[COL.상세제품군]);
-    ADJ.forEach((aj,ai)=>{ if(nk(aj.g)!==g||nk(aj.d)!==d) return; const s=R.adjStat[ai];
+  const ADJ=state.adj||[]; R.adjStat=ADJ.map(()=>({rows:0,a:0,cu:0,sub:0,extra:0,other:0,biz:new Set(),detG:new Set()}));
+  // 진단: 선박선 외 사업부 행, 다른 제품군에 있는 같은 상세제품군
+  parsed.rows.forEach(row=>{const c=row.cells; const isShip=norm(c[COL.사업부])==="선박선";
+    ADJ.forEach((aj,ai)=>{ if(nkx(aj.d)!==nkx(c[COL.상세제품군])) return; const s=R.adjStat[ai];
+      if(nkx(aj.g)===nkx(c[COL.제품군])){ if(!isShip){s.other++; s.biz.add(norm(c[COL.사업부]));} }
+      else if(isShip) s.detG.add(norm(c[COL.제품군])); });});
+  R.rows.forEach(rw=>{const c=rw.row.cells, g=nkx(c[COL.제품군]), d=nkx(c[COL.상세제품군]);
+    ADJ.forEach((aj,ai)=>{ if(nkx(aj.g)!==g||nkx(aj.d)!==d) return; const s=R.adjStat[ai];
       if(rw.adjIdx!=null&&rw.adjIdx!==ai){ s.dup=true; return; }   // 같은 상세제품군 중복 항목: 첫 항목만 적용
       s.rows++; rw.adjIdx=ai;
       rw.mon.forEach(x=>{ s.a+=x.a; s.cu+=x.pcu+x.mcu; s.sub+=x.psub+x.msub;
@@ -619,8 +633,7 @@ function compute(useOvr=true){
         const ex=aj.mode==="target"?x.a*aj.val-(x.cuT+x.subT):x.a*aj.val;
         x.adj+=ex; x.pcu+=ex; x.cuT=x.pcu+x.mcu; s.extra+=ex; });});});
   ADJ.forEach((aj,ai)=>{ if(aj.val==null||isNaN(aj.val)||!useOvr) return; const s=R.adjStat[ai];
-    if(s.dup&&!s.rows) add("warn","재료비율 조정",aj.g+" / "+aj.d+" – 같은 상세제품군 항목이 위에 있어 적용하지 않음 (중복)");
-    else if(!s.rows) add("warn","재료비율 조정",aj.g+" / "+aj.d+" – 해당 상세제품군 행이 매출계획에 없음");
+    if(!s.rows||!s.a) add("err","재료비율 조정",aj.g+" / "+aj.d+" – 조정이 반영되지 않음: "+adjWhy(s));
     else add("info","재료비율 조정",aj.g+" / "+aj.d+" "+s.rows+"행: "+(aj.mode==="target"?"목표 ":"가산 +")+(aj.val*100).toFixed(2)+(aj.mode==="target"?"%":"%p")+" → 동재료비 "+(s.extra>=0?"+":"")+fmt(s.extra,1)); });
   missCoef.forEach(k=>add("err","부재료비 계수","계수 없음: "+k+" → 제품 부재료비 0"));
   missRat.forEach(g=>add("err","상품재료비율","비율 없음: "+g+" → 상품 재료비 0"));
@@ -732,16 +745,19 @@ function renderAdj(){
   let h="<tr><th>제품군</th><th>상세제품군</th><th>방식</th><th>요율 (%)</th><th>적용 행</th><th>연간 매출액</th><th>조정 전 동재료비율</th><th>부재료비율</th><th>조정 전 재료비율</th><th class=\"p\">조정 후 동재료비율</th><th class=\"p\">조정 후 재료비율</th><th>동재료비 증가액</th><th></th></tr>";
   ADJ.forEach((a,i)=>{const s=R&&R.adjStat?R.adjStat[i]:null;
     const gl=[...new Set([...gs,a.g])].filter(Boolean), dl=[...new Set([...detOf(a.g),a.d])].filter(Boolean);
-    const sel=(cls,list,v)=>`<select data-i="${i}" class="${cls}">${list.map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}</select>`;
+    const has=(cls,x)=>(cls==="ag"?gs:detOf(a.g)).some(y=>nkx(y)===nkx(x));
+    const sel=(cls,list,v)=>`<select data-i="${i}" class="${cls}">${list.map(x=>`<option value="${esc(x)}"${x===v?" selected":""}>${esc(x)}${has(cls,x)?"":" (데이터 없음)"}</option>`).join("")}</select>`;
     const A=s?s.a:0, cu0=s?s.cu:0, sub=s?s.sub:0, ex=s?s.extra:0;
     h+=`<tr><td>${sel("ag",gl,a.g)}</td><td>${sel("ad",dl,a.d)}</td><td><select data-i="${i}" class="am"><option value="add"${a.mode!=="target"?" selected":""}>가산 (%p)</option><option value="target"${a.mode==="target"?" selected":""}>목표 재료비율 (%)</option></select></td>
       <td class="inp${a.val!=null?" ed":""}"><input data-i="${i}" class="av" value="${a.val==null?"":+(a.val*100).toFixed(4)}" placeholder="${a.mode==="target"?"예: 90":"예: 5"}"></td>
-      <td class="n">${s?(s.dup&&!s.rows?"중복":s.rows):"-"}</td><td class="n">${fmt(A)}</td><td class="n">${A?pc(cu0/A):"-"}</td><td class="n">${A?pc(sub/A):"-"}</td><td class="n">${A?pc((cu0+sub)/A):"-"}</td>
+      <td class="${s&&(!s.rows||!s.a)?"err":"n"}" style="${s&&(!s.rows||!s.a)?"color:var(--err);white-space:normal;max-width:260px":""}">${!s?"-":(s.rows&&s.a?s.rows:(s.rows?s.rows+" (":"0 (")+adjWhy(s)+")")}</td><td class="n">${fmt(A)}</td><td class="n">${A?pc(cu0/A):"-"}</td><td class="n">${A?pc(sub/A):"-"}</td><td class="n">${A?pc((cu0+sub)/A):"-"}</td>
       <td class="n p">${A?pc((cu0+ex)/A):"-"}</td><td class="n p">${A?pc((cu0+ex+sub)/A):"-"}</td><td class="n" style="${ex>0?"color:var(--err)":""}">${ex?(ex>0?"+":"")+fmt(ex,1):"-"}</td>
       <td><button class="btn danger adel" data-i="${i}">삭제</button></td></tr>`;});
   $("adjTable").innerHTML=h;
-  const act=ADJ.filter(a=>a.val!=null).length; $("adjInfo").textContent=act?`조정 적용 ${act}건`:"조정 없음 (요율을 입력하면 적용)";
-  st("st-adj",act?"warn":"");
+  const act=ADJ.map((a,i)=>({a,s:R&&R.adjStat?R.adjStat[i]:null})).filter(x=>x.a.val!=null);
+  const okN=act.filter(x=>x.s&&x.s.rows&&x.s.a).length, bad=act.length-okN;
+  $("adjInfo").innerHTML=!act.length?"조정 없음 (요율을 입력하면 적용)":`조정 반영 ${okN}건`+(bad?` · <b style="color:var(--err)">반영 안 됨 ${bad}건 – 적용 행 칸의 이유를 확인하세요</b>`:"");
+  st("st-adj",bad?"err":(okN?"warn":""));
   const upd=fn=>e=>{const i=+e.target.dataset.i; fn(state.adj[i],e.target.value); save(); recalc(); toast("재계산했습니다");};
   $("adjTable").querySelectorAll("select.ag").forEach(x=>x.onchange=upd((a,v)=>{a.g=v; const dl=detOf(v); if(!dl.includes(a.d)) a.d=dl[0]||"";}));
   $("adjTable").querySelectorAll("select.ad").forEach(x=>x.onchange=upd((a,v)=>a.d=v));
