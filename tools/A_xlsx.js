@@ -90,7 +90,7 @@ function buildWorkbook(){
   const sheets=[];
   // ---------- 1) 적용동가 ----------
   const A=XLSX_W.Sheet("적용동가"); sheets.push(A);
-  A.set(1,1,"적용동가 계산 (26년 11월 ~ 27년 12월)",T); A.set(2,1,"목표 프리미엄 ($/톤, 연간)",TXB); A.set(2,2,B.target,NUM("n0",{fill:"inp"}));
+  A.set(1,1,"적용동가 계산 (26년 11월 ~ 27년 12월)",T); A.set(2,1,"목표 프리미엄 ($/톤, 연간)",TXB); A.set(2,2,R.target!=null?R.target:B.target,NUM("n0",{fill:"inp"}));
   A.set(4,1,"항목",H);A.set(4,2,"단위",H); M14.forEach((m,i)=>A.set(4,3+i,m,H));
   const AR={}; const arows=[["t","제품 총동량 (생산계획 자체)","톤","v",x=>x.t,"n1"],["sq","SCR 선물잔량","톤","v",x=>x.sq,"n1"],["sl","SCR 선물LME","$/톤","v",x=>x.sl,"n0"],
     ["jq","JCR 선물잔량","톤","v",x=>x.jq,"n1"],["jl","JCR 선물LME","$/톤","v",x=>x.jl,"n0"],["nq","비선물 동량","톤","f",null,"n1"],["nl","비선물 LME","$/톤","v",x=>x.nl,"n0"],

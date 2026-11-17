@@ -57,6 +57,9 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 .msg{padding:7px 12px;border-radius:6px;margin:6px 0;font-size:12px}
 .msg.ok{background:var(--ok-soft);color:var(--ok)}.msg.warn{background:var(--warn-soft);color:var(--warn)}.msg.err{background:var(--err-soft);color:var(--err)}
 .muted{color:var(--muted)}
+td.inp{background:var(--input);padding:0}td.inp input{width:84px;border:0;background:transparent;text-align:right;font:inherit;color:var(--accent);padding:3px 6px}
+td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:700;color:var(--warn)}
+.kpi .d{font-size:12px;font-variant-numeric:tabular-nums}.kpi .d.up{color:var(--err)}.kpi .d.dn{color:var(--ok)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.on{opacity:.95}
 @media (max-width:640px){main{padding:12px 16px 60px}header{padding:12px 16px}nav{padding:8px 16px 0}.grid2{grid-template-columns:1fr}}
@@ -120,8 +123,15 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 </section>
 
 <section class="tab" id="t-cu">
+  <div class="kpis" id="wi-cu"></div>
   <div class="card">
     <h2>적용동가 계산 (26년 11월 ~ 27년 12월)</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label>목표 프리미엄 ($/톤) <input type="number" step="any" id="tgt" style="width:90px"></label>
+      <span class="muted" id="tgtInfo"></span>
+      <button class="btn ovrReset">수정 0칸 · 모두 되돌리기</button>
+    </div>
+    <p class="help"><b>노란 칸은 바로 수정할 수 있습니다</b> (Enter 또는 다른 칸 클릭 시 즉시 재계산). 수정한 칸은 주황 테두리로 표시되며, 보고 양식·엑셀 다운로드에도 반영됩니다. 엑셀 원본은 바뀌지 않습니다.</p>
     <p class="help">제품 총동량 = 생산계획 생산/자체 합계 (그 달 생산계획이 비어 있으면 재료비동가 시트 값). 매입동가 = (평균 LME + 목표 프리미엄) × 환율 ÷ 1,000, 적용동가 = 전월 매입동가.</p>
     <div class="scroll"><table id="cuTable"></table></div>
   </div>
@@ -151,14 +161,16 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 </section>
 
 <section class="tab" id="t-det">
+  <div class="kpis" id="wi-det"></div>
   <div class="card">
     <div class="row" style="margin-bottom:8px">
       <label>월 <select id="detM"></select></label>
+      <button class="btn ovrReset">수정 0칸 · 모두 되돌리기</button>
       <button class="btn" id="cpDet">상세 전체 복사 (월별 12열 × 12개월 + 연간)</button>
       <button class="btn pri" id="xlsxDet">엑셀 다운로드 (서식 + 수식)</button>
       <button class="btn" id="dlDet">CSV 다운로드</button>
     </div>
-    <p class="help">영업 매출계획과 같은 행(선박선)·같은 앞부분 열(사업부~수주LME) 뒤에 월별 재료비 항목을 붙인 상세 결과입니다. 화면은 선택한 월만 표시합니다.</p>
+    <p class="help">영업 매출계획과 같은 행(선박선)·같은 앞부분 열(사업부~수주LME) 뒤에 월별 재료비 항목을 붙인 상세 결과입니다. 화면은 선택한 월만 표시합니다. <b>월을 고르면 동량·매출액(노란 칸)을 바로 수정</b>할 수 있습니다.</p>
     <div class="scroll" style="max-height:640px"><table id="detTable"></table></div>
   </div>
 </section>
@@ -353,7 +365,8 @@ function layoutCheck(rows){
 /* ===== A단계 ===== */
 const LS="mc_A_v1";
 const M14=["26년 11월","26년 12월",...MONTHS];
-let state={paste:"",startCol:"auto",startRow:15,verName:"",prod:"",basis:"",ratio:"",coef:""};
+let state={paste:"",startCol:"auto",startRow:15,verName:"",prod:"",basis:"",ratio:"",coef:"",ovr:{basis:{},target:null,sales:{}}};
+let BASE=null;   // 수정 전(붙여넣은 값 그대로) 계산 결과
 let parsed=null, P=null, B=null, RT=null, CF=null, RES=null;
 function save(){try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}}
 function load(){try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s)Object.assign(state,s);}catch(e){}}
@@ -454,7 +467,7 @@ function parseCoef(text){
   return {m,n,blank,hasPack:cw>=0,packVals:pv,dc,dp};
 }
 /* --- 계산 --- */
-function compute(){
+function compute(useOvr=true){
   const issues=[]; const add=(lvl,where,msg)=>issues.push({lvl,where,msg});
   const R={issues,ok:false};
   if(!parsed){add("err","영업 매출계획","붙여넣지 않았습니다.");return R;}
@@ -475,22 +488,28 @@ function compute(){
   if(!B||B.error) return R;
   const Pg=P&&!P.error?P.g:{}, coefM=CF&&!CF.error?CF.m:{}, ratM=RT&&!RT.error?RT.m:{};
   // 1) 적용동가
-  const v=B.v, hasP=P&&!P.error;
+  const O=useOvr?(state.ovr||{}):{}, ob=O.basis||{}, os=O.sales||{};
+  const v={}; for(const k in B.v) v[k]=B.v[k]?B.v[k].slice():B.v[k];
+  for(const k in ob){ if(!v[k]) v[k]=Array(14).fill(null); for(const i in ob[k]) v[k][+i]=ob[k][i]; }
+  const target=O.target!=null?O.target:B.target; R.target=target;
+  const hasP=P&&!P.error;
+  const sv=(r,m,k)=>{const o=os[r.src+"|"+m+"|"+k]; return o!=null?o:nz(r.cells[M0+m*MW+(k==="q"?OFF.동량:OFF.매출)]);};
   // 제품 총동량: 생산계획 자체 동량 우선, 그 달 생산계획 값이 비어 있으면(0) 재료비동가 시트 값 사용
-  const totSrc=[]; const tot=Array.from({length:14},(_,i)=>{const pv=hasP?P.tot[i]:0, bv=v.tot?v.tot[i]:null;
+  const totSrc=[]; const tot=Array.from({length:14},(_,i)=>{if(ob.tot&&ob.tot[i]!=null){totSrc[i]="수정";return ob.tot[i];}
+    const pv=hasP?P.tot[i]:0, bv=B.v.tot?B.v.tot[i]:null;
     if(pv>0){totSrc[i]="생산계획";return pv;} if(bv!=null&&bv>0){totSrc[i]="재료비동가";return bv;} totSrc[i]="-";return 0;});
   const cu=[]; for(let i=0;i<14;i++){
     const t=tot[i]||0, sq=v.sq[i]||0, jq=v.jq[i]||0, nq=t-sq-jq;
     const al=t?(sq*(v.sl[i]||0)+jq*(v.jl[i]||0)+nq*(v.nl[i]||0))/t:null;
     const ap=t?(sq*(v.sp[i]||0)+jq*(v.jp[i]||0)+nq*((v.np&&v.np[i])||0))/t:null;
-    const ll=al==null?null:al+B.target, fx=v.fx[i];
+    const ll=al==null?null:al+target, fx=v.fx[i];
     const bp=ll!=null&&fx?ll*fx/1000:null;
-    cu.push({t,sq,jq,nq,sl:v.sl[i],jl:v.jl[i],nl:v.nl[i],al,ap,tp:B.target,ll,fx,bp,bpX:v.bp?v.bp[i]:null,tX:v.tot?v.tot[i]:null});
+    cu.push({t,sq,jq,nq,sl:v.sl[i],sp:v.sp[i],jl:v.jl[i],jp:v.jp[i],nl:v.nl[i],np:v.np?v.np[i]:null,al,ap,tp:target,ll,fx,bp,bpX:B.v.bp?B.v.bp[i]:null,tX:B.v.tot?B.v.tot[i]:null,tSrc:totSrc[i]});
     if(i>=1&&!t) add("err","적용동가",M14[i]+" 제품 총동량이 0 → 매입동가 계산 불가");
     if(nq< -1e-9) add("err","적용동가",M14[i]+" 비선물 동량 음수 ("+fmt(nq,1)+"톤) – 선물잔량이 제품 총동량보다 큼");
     if(t&&!fx) add("err","적용동가",M14[i]+" 환율 없음");
     if(hasP&&totSrc[i]==="재료비동가") add("warn","적용동가",M14[i]+" 생산계획 자체 동량이 비어 있음 → 재료비동가 시트 제품 총동량("+fmt(t,1)+") 사용");
-    else if(hasP&&v.tot&&v.tot[i]!=null&&Math.abs(v.tot[i]-t)>0.05) add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량("+fmt(v.tot[i],1)+")과 생산계획 자체 동량("+fmt(t,1)+")이 다름 → 생산계획 값 사용");
+    else if(hasP&&totSrc[i]!=="수정"&&B.v.tot&&B.v.tot[i]!=null&&Math.abs(B.v.tot[i]-t)>0.05) add("warn","적용동가",M14[i]+" 재료비동가 시트 제품 총동량("+fmt(v.tot[i],1)+")과 생산계획 자체 동량("+fmt(t,1)+")이 다름 → 생산계획 값 사용");
   }
   const apply=MONTHS.map((_,m)=>cu[m+1].bp);
   R.cu=cu; R.apply=apply;
@@ -498,7 +517,7 @@ function compute(){
   const rows=parsed.rows.filter(r=>norm(r.cells[COL.사업부])==="선박선");
   R.excluded=parsed.rows.length-rows.length;
   const G={}; rows.forEach(r=>{const g=nk(r.cells[COL.제품군]);const x=(G[g]=G[g]||{q:Array(12).fill(0),a:Array(12).fill(0),name:norm(r.cells[COL.제품군])});
-    for(let m=0;m<12;m++){x.q[m]+=nz(r.cells[M0+m*MW+OFF.동량]);x.a[m]+=nz(r.cells[M0+m*MW+OFF.매출]);}});
+    for(let m=0;m<12;m++){x.q[m]+=sv(r,m,"q");x.a[m]+=sv(r,m,"a");}});
   R.G=G;
   // 생산계획 vs 매출 비교
   const match=[]; const gs=new Set([...Object.keys(G),...Object.keys(Pg)]);
@@ -525,7 +544,7 @@ function compute(){
     const cf=coefM[key], rat=ratM[g], p=Pg[g];
     const baseTw=nz(c[COL.세선비중]), baseTh=nz(c[COL.태선비중]);
     const mon=MONTHS.map((_,m)=>{
-      const b=M0+m*MW, q=nz(c[b+OFF.동량]), a=nz(c[b+OFF.매출]);
+      const b=M0+m*MW, q=sv(row,m,"q"), a=sv(row,m,"a");
       let tw=parseNum(c[b+OFF.세선]); if(tw==null||isNaN(tw)) tw=baseTw; let th=parseNum(c[b+OFF.태선]); if(th==null||isNaN(th)) th=baseTh;
       const Gq=G[g].q[m], Ga=G[g].a[m];
       const mq=p&&Gq?p.OEM.q[m+2]*q/Gq:0, ma=p&&Ga?p.OEM.a[m+2]*a/Ga:0;
@@ -589,7 +608,8 @@ function pasteInfoText(){
 }
 
 function st(id,cls){const e=$(id);if(e)e.className="st"+(cls?" "+cls:"");}
-function runAll(){
+function runAll(keep){
+  if(!keep) state.ovr={basis:{},target:null,sales:{}};
   state.paste=$("in-sales").value;state.prod=$("in-prod").value;state.basis=$("in-basis").value;state.ratio=$("in-ratio").value;state.coef=$("in-coef").value;
   state.verName=$("verName").value;state.startCol=$("startCol").value;state.startRow=Number($("startRow").value)||15; save();
   parsed=state.paste.trim()?parsePaste():null; P=state.prod.trim()?parseProd(state.prod):null; B=state.basis.trim()?parseBasis(state.basis):null;
@@ -600,8 +620,10 @@ function runAll(){
   $("info-basis").textContent=B?(B.error?"오류: "+B.error:`목표 프리미엄 ${fmt(B.target)} · 14개월 인식`):""; st("st-basis",!B?"":(B.error?"err":"ok"));
   $("info-ratio").textContent=RT?(RT.error?"오류: "+RT.error:Object.entries(RT.m).map(([k,v])=>k+" "+(v==null?"(빈칸)":(v*100).toFixed(1)+"%")+(RT.hasPack?" / 포장 "+(RT.pk[k]==null?"(빈칸)":RT.pk[k]):"")).join(" · ")):""; st("st-ratio",!RT?"":(RT.error?"err":"ok"));
   $("info-coef").textContent=CF?(CF.error?"오류: "+CF.error:`${CF.n}행 인식${CF.blank?` · 계수 빈칸 ${CF.blank}행`:""}`+(CF.hasPack?` · 포장비 계수 ${CF.packVals.slice(0,3).join(", ")}${CF.packVals.length>3?" 외":""}`:" · 포장비 계수 열 없음")):""; st("st-coef",!CF?"":(CF.error?"err":(CF.blank?"warn":"ok")));
-  RES=compute(); render();
+  recalc();
 }
+function ovrCount(){const o=state.ovr||{};let n=o.target!=null?1:0;for(const k in o.basis||{})n+=Object.keys(o.basis[k]).length;return n+Object.keys(o.sales||{}).length;}
+function recalc(){RES=compute(true);BASE=ovrCount()&&RES.ok?compute(false):null;render();}
 function render(){
   const R=RES; const errs=R.issues.filter(x=>x.lvl==="err"), warns=R.issues.filter(x=>x.lvl==="warn");
   st("st-check",errs.length?"err":(warns.length?"warn":(R.ok?"ok":"")));
@@ -611,17 +633,45 @@ function render(){
   if(!R.ok){["cuTable","matchTable","repTable","detTable","kpis"].forEach(id=>$(id).innerHTML="");st("st-cu","");return;}
   // 적용동가 표
   const cu=R.cu; st("st-cu",cu.some((x,i)=>i>=1&&(x.bp==null||x.nq<0))?"err":"ok");
-  const rowsCu=[["제품 총동량 (톤)",x=>x.t,1],["SCR 선물잔량",x=>x.sq,1],["JCR 선물잔량",x=>x.jq,1],["비선물 동량",x=>x.nq,1],["SCR 선물LME",x=>x.sl,0],["JCR 선물LME",x=>x.jl,0],["비선물 LME",x=>x.nl,0],
-    ["평균 LME (프리미엄 제외)",x=>x.al,1],["평균 프리미엄 (참고)",x=>x.ap,1],["계획 적용 프리미엄 (목표)",x=>x.tp,0],["평균 LME (프리미엄 포함)",x=>x.ll,1],["환율",x=>x.fx,2],
+  const rowsCu=[["제품 총동량 (톤)",x=>x.t,3,"tot"],["SCR 선물잔량",x=>x.sq,3,"sq"],["SCR 선물LME",x=>x.sl,0,"sl"],["SCR 프리미엄",x=>x.sp,0,"sp"],
+    ["JCR 선물잔량",x=>x.jq,3,"jq"],["JCR 선물LME",x=>x.jl,0,"jl"],["JCR 프리미엄",x=>x.jp,0,"jp"],["비선물 동량",x=>x.nq,3],["비선물 LME",x=>x.nl,0,"nl"],["비선물 프리미엄",x=>x.np,0,"np"],
+    ["평균 LME (프리미엄 제외)",x=>x.al,1],["평균 프리미엄 (참고)",x=>x.ap,1],["계획 적용 프리미엄 (목표)",x=>x.tp,0],["평균 LME (프리미엄 포함)",x=>x.ll,1],["환율",x=>x.fx,2,"fx"],
     ["매입동가 (원/kg)",x=>x.bp,1],["적용동가 (원/kg) = 전월 매입동가",(x,i)=>i>=1?cu[i-1].bp:null,1],["(참고) 엑셀 매입동가",x=>x.bpX,1]];
-  $("cuTable").innerHTML="<tr><th>항목</th>"+M14.map(m=>`<th>${m}</th>`).join("")+"</tr>"+rowsCu.map(([l,f,d])=>`<tr class="${/적용동가/.test(l)?"grand":(/매입동가 \(/.test(l)?"sub":"")}"><td>${l}</td>`+cu.map((x,i)=>{const v=f(x,i);const bad=l.startsWith("비선물 동량")&&v<0;return `<td class="n" style="${bad?"color:var(--err)":""}">${fmt(v,d)}</td>`;}).join("")+"</tr>").join("");
+  const ob=(state.ovr&&state.ovr.basis)||{};
+  $("cuTable").innerHTML="<tr><th>항목</th>"+M14.map(m=>`<th>${m}</th>`).join("")+"</tr>"+rowsCu.map(([l,f,d,key])=>`<tr class="${/적용동가/.test(l)?"grand":(/매입동가 \(/.test(l)?"sub":"")}"><td>${l}</td>`+cu.map((x,i)=>{const v=f(x,i);
+    if(key){const ed=ob[key]&&ob[key][i]!=null;return `<td class="inp${ed?" ed":""}" title="${ed?"수정됨":"붙여넣은 값"}${key==="tot"&&x.tSrc?" · 출처: "+x.tSrc:""}"><input data-k="${key}" data-i="${i}" value="${v==null?"":+(+v).toFixed(6)}"></td>`;}const bad=l.startsWith("비선물 동량")&&v<0;return `<td class="n" style="${bad?"color:var(--err)":""}">${fmt(v,d)}</td>`;}).join("")+"</tr>").join("");
   // 생산 vs 매출
   $("matchTable").innerHTML="<tr><th>제품군</th><th>구분</th>"+MONTHS.map(m=>`<th>${m}</th>`).join("")+"<th>연간</th></tr>"+R.match.map(x=>{
     const line=(l,arr,d)=>`<tr><td>${esc(x.g)}</td><td>${l}</td>`+arr.map(v=>`<td class="n">${v==null?"":fmt(v,d)}</td>`).join("")+`<td class="n">${arr.some(v=>v==null)?"":fmt(sumA(arr),d)}</td></tr>`;
     const dq=x.pq.map((v,m)=>v==null?null:v-x.sq[m]), da=x.pa.map((v,m)=>v==null?null:v-x.sa[m]);
     return line("매출 동량",x.sq,2)+line("생산 동량(자체+OEM)",x.pq,2)+line("  └ OEM 동량",x.oq,2)+line("동량 차이",dq,2)+line("매출 금액",x.sa,1)+line("생산 금액(자체+OEM)",x.pa,1)+line("  └ OEM 금액",x.oa,1)+line("금액 차이",da,1);}).join("");
-  renderReport(); renderDetail();
+  renderReport(); renderDetail(); bindEdits(); renderWhatIf();
 }
+function totalsOf(R){let a=0,q=0,cu=0,sub=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;cu+=x.cuT;sub+=x.subT;}));return {a,q,cu,sub,sum:cu+sub,rate:a?(cu+sub)/a:0};}
+function renderWhatIf(){
+  const n=ovrCount(); document.querySelectorAll(".ovrReset").forEach(b=>{b.textContent=`수정 ${n}칸 · 모두 되돌리기`;b.disabled=!n;});
+  $("tgt").value=RES.target; $("tgtInfo").textContent=state.ovr.target!=null?`(붙여넣은 값 ${fmt(B.target)} → 수정)`:"(붙여넣은 값)";
+  const T=totalsOf(RES), B0=BASE?totalsOf(BASE):null;
+  const card=(l,k,dec,pct)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
+    return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
+  const h=card("매출액 (백만원)","a",0)+card("동량 (톤)","q",3)+card("동재료비","cu",1)+card("부재료비","sub",1)+card("재료비합","sum",1)+card("재료비율","rate",0,true);
+  $("wi-cu").innerHTML=h; $("wi-det").innerHTML=h;
+}
+function bindEdits(){
+  $("cuTable").querySelectorAll("input").forEach(inp=>inp.onchange=()=>{const k=inp.dataset.k,i=+inp.dataset.i;const ob=state.ovr.basis;
+    const raw=inp.value.trim(); const val=raw===""?null:parseNum(raw);
+    if(val==null||isNaN(val)){ if(ob[k]){delete ob[k][i]; if(!Object.keys(ob[k]).length) delete ob[k];} }
+    else { const orig=k==="tot"?(BASE||RES).cu[i].t:(B.v[k]?B.v[k][i]:null); const cur=k==="tot"&&ob.tot&&ob.tot[i]!=null;
+      if(orig!=null&&Math.abs(val-orig)<1e-12&&!cur){} else {(ob[k]=ob[k]||{})[i]=val; if(orig!=null&&Math.abs(val-orig)<1e-12){delete ob[k][i]; if(!Object.keys(ob[k]).length) delete ob[k];}} }
+    save(); recalc(); toast("재계산했습니다");});
+  $("detTable").querySelectorAll("input").forEach(inp=>inp.onchange=()=>{const key=inp.dataset.s+"|"+inp.dataset.m+"|"+inp.dataset.k;const os=state.ovr.sales;
+    const row=RES.rows.find(r=>String(r.row.src)===inp.dataset.s); const orig=nz(row.row.cells[M0+(+inp.dataset.m)*MW+(inp.dataset.k==="q"?OFF.동량:OFF.매출)]);
+    const val=inp.value.trim()===""?null:parseNum(inp.value);
+    if(val==null||isNaN(val)||Math.abs(val-orig)<1e-12) delete os[key]; else os[key]=val;
+    save(); recalc(); toast("재계산했습니다");});
+}
+$("tgt").onchange=()=>{const v=parseNum($("tgt").value); state.ovr.target=(v==null||isNaN(v)||Math.abs(v-B.target)<1e-12)?null:v; save(); recalc(); toast("재계산했습니다");};
+document.querySelectorAll(".ovrReset").forEach(b=>b.onclick=()=>{if(!confirm("수정한 값을 모두 붙여넣은 원래 값으로 되돌릴까요?"))return;state.ovr={basis:{},target:null,sales:{}};save();recalc();toast("원래 값으로 되돌렸습니다");});
 let REP=null;
 function renderReport(){
   const R=RES; REP=buildReport(R); const view=$("repView").value, gsel=$("repG").value;
@@ -654,7 +704,9 @@ function renderDetail(){
   let h="<tr><th>엑셀 행</th>"+FRONT.slice(2,6).map(f=>`<th>${f[1]}</th>`).join("")+"<th>세선</th><th>태선</th>"+DCOLS.map(d=>`<th>${d[0]}</th>`).join("")+"</tr>";
   RES.rows.forEach(r=>{const c=r.row.cells;const x=mv==="Y"?yearRow(r):r.mon[+mv];
     h+=`<tr><td class="n">${r.row.excelRow}</td>`+FRONT.slice(2,6).map(f=>`<td>${esc(c[COL[f[0]]])}</td>`).join("")+`<td class="n">${mv==="Y"?"":fmt(x.tw*100,1)+"%"}</td><td class="n">${mv==="Y"?"":fmt(x.th*100,1)+"%"}</td>`+
-      DCOLS.map(([l,k,d])=>`<td class="n">${k==="rateT"?fmtL("rate",dval(x,k)):fmt(dval(x,k),d)}</td>`).join("")+"</tr>";});
+      DCOLS.map(([l,k,d])=>{ if(mv!=="Y"&&(k==="q"||k==="a")){const ed=state.ovr.sales[r.row.src+"|"+mv+"|"+k]!=null;
+          return `<td class="inp${ed?" ed":""}"><input data-s="${r.row.src}" data-m="${mv}" data-k="${k}" value="${+(+x[k]).toFixed(6)}"></td>`;}
+        return `<td class="n">${k==="rateT"?fmtL("rate",dval(x,k)):fmt(dval(x,k),d)}</td>`;}).join("")+"</tr>";});
   $("detTable").innerHTML=h;
 }
 /* --- 내보내기 --- */
@@ -681,7 +733,7 @@ $("cpDet").onclick=()=>{if(!needOk())return;copyText(detailRows().map(r=>r.map(t
 $("dlDet").onclick=()=>{if(!needOk())return;dl("재료비_상세.csv",detailRows());};
 $("repView").onchange=()=>RES&&RES.ok&&renderReport();
 $("repG").onchange=()=>RES&&RES.ok&&renderReport();
-$("detM").onchange=()=>RES&&RES.ok&&renderDetail();
+$("detM").onchange=()=>{if(RES&&RES.ok){renderDetail();bindEdits();}};
 /* ===== 엑셀(.xlsx) 내보내기: 서식 + 수식 (외부 라이브러리 없음) ===== */
 const XLSX_W=(()=>{
   const enc=new TextEncoder();
@@ -774,7 +826,7 @@ function buildWorkbook(){
   const sheets=[];
   // ---------- 1) 적용동가 ----------
   const A=XLSX_W.Sheet("적용동가"); sheets.push(A);
-  A.set(1,1,"적용동가 계산 (26년 11월 ~ 27년 12월)",T); A.set(2,1,"목표 프리미엄 ($/톤, 연간)",TXB); A.set(2,2,B.target,NUM("n0",{fill:"inp"}));
+  A.set(1,1,"적용동가 계산 (26년 11월 ~ 27년 12월)",T); A.set(2,1,"목표 프리미엄 ($/톤, 연간)",TXB); A.set(2,2,R.target!=null?R.target:B.target,NUM("n0",{fill:"inp"}));
   A.set(4,1,"항목",H);A.set(4,2,"단위",H); M14.forEach((m,i)=>A.set(4,3+i,m,H));
   const AR={}; const arows=[["t","제품 총동량 (생산계획 자체)","톤","v",x=>x.t,"n1"],["sq","SCR 선물잔량","톤","v",x=>x.sq,"n1"],["sl","SCR 선물LME","$/톤","v",x=>x.sl,"n0"],
     ["jq","JCR 선물잔량","톤","v",x=>x.jq,"n1"],["jl","JCR 선물LME","$/톤","v",x=>x.jl,"n0"],["nq","비선물 동량","톤","f",null,"n1"],["nl","비선물 LME","$/톤","v",x=>x.nl,"n0"],
@@ -923,7 +975,7 @@ const SAMPLES={"sales": "\t\"(사업부)\n-선박선\n-광통신\n중 1개로 �
 $("sampleAll").onclick=()=>{$("in-sales").value=SAMPLES.sales;$("in-prod").value=SAMPLES.prod;$("in-basis").value=SAMPLES.basis;$("in-ratio").value=SAMPLES.ratio;$("in-coef").value=SAMPLES.coef;
   $("verName").value="예시 (0단계 양식 예시 + 임의 생산계획·기준)";$("startCol").value="auto";runAll();toast("예시 데이터로 계산했습니다");};
 $("clearAll").onclick=()=>{if(!confirm("붙여넣은 자료를 모두 지울까요?"))return;["in-sales","in-prod","in-basis","in-ratio","in-coef"].forEach(id=>$(id).value="");runAll();};
-$("runAll").onclick=runAll;
+$("runAll").onclick=()=>runAll(false);
 /* --- 탭 --- */
 function showTab(t){document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll("section.tab").forEach(s=>s.classList.toggle("on",s.id==="t-"+t));}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
@@ -931,7 +983,8 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>showTab(b.datas
 load();
 $("in-sales").value=state.paste||"";$("in-prod").value=state.prod||"";$("in-basis").value=state.basis||"";$("in-ratio").value=state.ratio||"";$("in-coef").value=state.coef||"";
 $("verName").value=state.verName||"";$("startCol").value=state.startCol||"auto";$("startRow").value=state.startRow||15;
-if(state.paste||state.basis) runAll();
+state.ovr=state.ovr||{basis:{},target:null,sales:{}};
+if(state.paste||state.basis) runAll(true);
 </script>
 </body>
 </html>
