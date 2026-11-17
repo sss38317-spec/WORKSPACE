@@ -190,7 +190,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
     <tr><td>부재료비 단가 (백만원/톤)</td><td>세선비중 × 세선 계수 + 태선비중 × 태선 계수 (계수 = 26년 세·태선별 부재료비 ÷ 동량, 원/kg ÷ 1,000) (계수: 동량지수_부재료비 U·V열, 키 = 제품군+상세+거래선+통화)</td></tr>
     <tr><td>동재료비 (제품)</td><td>제품 동량 × 적용동가 ÷ 1,000</td></tr>
     <tr><td>부재료비</td><td>제품: 제품 동량 × (부재료비 단가 + 포장비 단가) / 상품: 상품 금액 × 상품재료비율</td></tr>
-    <tr><td>상품재료비율</td><td>상세제품군별 1~9월 상품매출원가 ÷ 원화판매금액. 실적 없는 상세제품군은 제품군 합계 → 총합계 비율 사용 (검증 탭에 표시)</td></tr>
+    <tr><td>상품재료비율</td><td>상세제품군별 1~9월 상품매출원가 ÷ 원화판매금액. 실적 없는 상세제품군은 같은 제품군 비율(제품군 상세 실적 합산) → 없으면 총합계 비율 (검증 탭에 표시)</td></tr>
     <tr><td>재료비합 · 재료비율</td><td>동재료비 + 부재료비 / 재료비합 ÷ 금액</td></tr>
     <tr><td>톤당단가</td><td>금액 ÷ 동량 (동량지수)</td></tr>
   </table></div>
@@ -284,7 +284,7 @@ function parseRatio(text){
   for(let i=0;i<raw.length;i++){const r=raw[i].map(norm);
     const cg=r.indexOf("제품군"), cd=r.indexOf("상세"), ca=r.findIndex(x=>/판매금액/.test(x)), cc=r.findIndex(x=>/매출원가/.test(x));
     if(cg>=0&&cd>=0&&ca>=0&&cc>=0){
-      const md={}, mg={}, src={}; let total=null, g0="", n=0;
+      const md={}, mg={}, src={}, ga={}, gc={}; let total=null, g0="", n=0;
       for(let j=i+1;j<raw.length;j++){const row=raw[j]; const gRaw=norm(row[cg]), d=norm(row[cd]);
         if(gRaw.startsWith("※")) continue;
         const a=parseNum(row[ca]), c=parseNum(row[cc]); if(a==null||isNaN(a)||c==null||isNaN(c)) continue;
@@ -293,9 +293,10 @@ function parseRatio(text){
         if(gRaw) g0=gRaw;
         if(/(요약|합계|계)$/.test(gRaw)&&!d){ mg[nk(gRaw.replace(/\s*(요약|합계|계)$/,""))]=rate; continue; }
         if(!d){ if(g0) mg[nk(g0)]=rate; continue; }
-        md[nk(g0)+"|"+nk(d)]=rate; src[nk(g0)+"|"+nk(d)]={g:g0,d,a,c}; n++;
+        md[nk(g0)+"|"+nk(d)]=rate; src[nk(g0)+"|"+nk(d)]={g:g0,d,a,c}; n++; ga[nk(g0)]=(ga[nk(g0)]||0)+a; gc[nk(g0)]=(gc[nk(g0)]||0)+c;
       }
       if(!n&&total==null) return {error:"상세제품군 실적 행을 찾지 못했습니다."};
+      for(const g in ga) if(mg[g]==null&&ga[g]) mg[g]=gc[g]/ga[g];   // 같은 제품군 상세제품군 실적 합산 비율
       return {mode:"detail",md,mg,total,src,n,m:{},pk:{},hasPack:false};
     }
   }

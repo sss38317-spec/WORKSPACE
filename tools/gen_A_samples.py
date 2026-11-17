@@ -82,7 +82,14 @@ RATd={}; _g=""
 for g_,d_,q_,a_,c_ in RTAB:
     _g=g_ or _g; RATd[(_g,d_)]=c_/a_
 RTOTAL=RTOT[2]/RTOT[1]
-def ratOf(g,det): return RATd.get((g,det),RTOTAL)
+RGRP={}
+for (g_,d_),r_ in RATd.items():
+    a_=sum(x[3] for x in RTAB if (x[1]==d_)); c_=sum(x[4] for x in RTAB if (x[1]==d_))
+    A,Cc=RGRP.get(g_,(0,0)); RGRP[g_]=(A+a_,Cc+c_)
+def ratOf(g,det):
+    if (g,det) in RATd: return RATd[(g,det)]
+    if g in RGRP and RGRP[g][0]: return RGRP[g][1]/RGRP[g][0]
+    return RTOTAL
 PACKW=0.303089   # 포장비 계수 (백만원/톤) – 사용자 기준양식처럼 전 행 일괄값
 # 상품재료비율 (사용자 수정 양식: 3행 머리글, 4행 매출액·재료비 보조 머리글, 5행부터 값)
 rat=[["","품목자산분류","상품"],["","* 1~9월 매출 및 원가실적 "],["","","","값"],["","제품군","상세","합계 : 기준단위수량","합계 : 원화판매금액","합계 : 상품매출원가",""]]+[["",g_,d_,q_,a_,c_,f"{c_/a_*100:.1f}%"] for g_,d_,q_,a_,c_ in RTAB]+[["","총합계","",*RTOT,f"{RTOTAL*100:.1f}%"]]
