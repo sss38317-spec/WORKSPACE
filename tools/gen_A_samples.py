@@ -124,8 +124,9 @@ for d in sales:
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
         pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACKW
-        cu=pq*apply[m]/1000; sub=pq*unit+oa*ratOf(g,d['det'])
-        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=oa*ratOf(g,d['det'])
+        mcu=oq*apply[m]/1000; msub=oa*ratOf(g,d['det'])-mcu   # 상품: 동재료비 = 상품 동량×적용동가, 부재료비 = 상품 매출×비율 − 상품 동재료비
+        cu=pq*apply[m]/1000+mcu; sub=pq*unit+msub
+        tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=msub
 tsv=lambda rr: "\n".join("\t".join(('"'+str(x).replace('"','""')+'"') if any(ch in str(x) for ch in '\t\n"') else str(x) for x in r) for r in rr)
 out={'sales':tsv([*hdr,*rows]),'prod':tsv(prod),'basis':tsv(bas),'ratio':tsv(rat),'coef':tsv(coef)}
 json.dump(out,open(f'{S}/A_samples.json','w'),ensure_ascii=False)
