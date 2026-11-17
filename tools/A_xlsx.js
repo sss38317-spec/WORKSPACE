@@ -113,15 +113,15 @@ function buildWorkbook(){
   // ---------- 2) 상세 (수식) ----------
   const D=XLSX_W.Sheet("상세");
   const FR=[["엑셀행",null],...FRONT.map(f=>[f[1],f[0]])]; // A~R
-  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, MB=cS+4, MWD=16;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
-  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
+  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, cW=cS+4, cX=cS+5, MB=cS+6, MWD=17;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
+  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비조정","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
   const mc=(m,k)=>MB+m*MWD+DK.indexOf(k);
-  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
+  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비조정","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
   const YB=MB+12*MWD, yc=k=>YB+YK.indexOf(k);
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
   FR.forEach((f,i)=>{D.set(3,1+i,"",H);D.set(4,1+i,f[0],H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
-  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
+  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
     DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품재료비"].includes(k)?HM:(["제품동량","제품매출","제품부재료비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
@@ -132,6 +132,8 @@ function buildWorkbook(){
     D.set(r,cS,rw.cf?rw.cf.s:"",NUM("n3",{fill:"inp"}));D.set(r,cT,rw.cf?rw.cf.t:"",NUM("n3",{fill:"inp"}));
     D.set(r,cU,rw.rat||0,NUM("pct",{fill:"inp"}));
     D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3",{fill:"inp"}));
+    const aj=rw.adjIdx!=null?(state.adj||[])[rw.adjIdx]:null, ajOn=aj&&aj.val!=null&&!isNaN(aj.val);
+    D.set(r,cW,ajOn&&aj.mode!=="target"?aj.val:"",NUM("pct",{fill:"inp"})); D.set(r,cX,ajOn&&aj.mode==="target"?aj.val:"",NUM("pct",{fill:"inp"}));
     rw.mon.forEach((x,m)=>{const ref=k=>C(mc(m,k))+r, pc=`${PB}!${C(3+m)}:${C(3+m)}`, crit=t=>`${PB}!$A:$A,$D${r},${PB}!$B:$B,"${t}"`;
       D.set(r,mc(m,"동량"),x.q,NUM("n2",{fill:"inp"}));D.set(r,mc(m,"매출액"),x.a,NUM("n1",{fill:"inp"}));
       D.set(r,mc(m,"세선비중"),x.tw,NUM("pct",{fill:"inp"}));D.set(r,mc(m,"태선비중"),x.th,NUM("pct",{fill:"inp"}));
@@ -141,13 +143,14 @@ function buildWorkbook(){
       D.set(r,mc(m,"제품매출"),x.pa,NUM("n1",{fill:"prod"}),`${ref("매출액")}-${ref("상품매출")}`);
       D.set(r,mc(m,"적용동가"),x.price||0,NUM("n1"),apRef(m));
       D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`${ref("세선비중")}*$${C(cS)}${r}+${ref("태선비중")}*$${C(cT)}${r}`);
-      D.set(r,mc(m,"동재료비"),x.pcu,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000`);
+      D.set(r,mc(m,"동재료비조정"),x.adj||0,NUM("n1",{fill:x.adj?"key":undefined}),`IF(N($${C(cX)}${r})>0,${ref("매출액")}*$${C(cX)}${r}-(${ref("제품동량")}*${ref("적용동가")}/1000+${ref("제품부재료비")}+${ref("상품재료비")}),${ref("매출액")}*N($${C(cW)}${r}))`);
+      D.set(r,mc(m,"동재료비"),x.pcu,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000+${ref("동재료비조정")}`);
       D.set(r,mc(m,"제품부재료비"),x.psub,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*(${ref("부재료비단가")}+$${C(cV)}${r})`);
       D.set(r,mc(m,"상품재료비"),x.msub,NUM("n1",{fill:"merch"}),`${ref("상품매출")}*$${C(cU)}${r}`);
       D.set(r,mc(m,"부재료비"),x.psub+x.msub,NUM("n1"),`${ref("제품부재료비")}+${ref("상품재료비")}`);
       D.set(r,mc(m,"재료비합"),x.pcu+x.psub+x.msub,NUM("n1",{font:"b"}),`${ref("동재료비")}+${ref("부재료비")}`);
       D.set(r,mc(m,"재료비율"),x.a?(x.pcu+x.psub+x.msub)/x.a:0,NUM("pct"),`IFERROR(${ref("재료비합")}/${ref("매출액")},0)`);});
-    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비:y.cuT,제품부재료비:y.psub,상품재료비:y.subT-y.psub,부재료비:y.subT,재료비합:y.cuT+y.subT};
+    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비조정:y.adj||0,동재료비:y.cuT,제품부재료비:y.psub,상품재료비:y.subT-y.psub,부재료비:y.subT,재료비합:y.cuT+y.subT};
     YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
       D.set(r,c2,yv[k],NUM(["동량","상품동량","제품동량"].includes(k)?"n2":"n1",{fill:"sub"}),MONTHS.map((_,m)=>C(mc(m,k))+r).join("+"));});
   });

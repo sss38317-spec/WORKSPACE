@@ -76,6 +76,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
   <button data-t="check">③ 검증<span class="st" id="st-check"></span></button>
   <button data-t="rep">④ 결과 · 보고 양식</button>
   <button data-t="det">⑤ 결과 · 상세</button>
+  <button data-t="adj">⑥ 재료비율 조정<span class="st" id="st-adj"></span></button>
   <button data-t="rule">계산 규칙</button>
 </nav>
 <main>
@@ -175,6 +176,18 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
   </div>
 </section>
 
+<section class="tab" id="t-adj">
+  <div class="kpis" id="wi-adj"></div>
+  <div class="card">
+    <h2>재료비율 조정 (증가분 전액 동재료비 반영)</h2>
+    <p class="help">동량지수 오류 등으로 실제 재료비율(동+부재료)을 올려야 하는 상세제품군에 요율을 넣으면, <b>늘어나는 재료비를 모두 동재료비에 더해</b> 동재료비율이 올라갑니다 (부재료비는 그대로).
+      <b>가산(%p)</b>: 재료비율 + 입력값 → 증가액 = 매출액 × 입력값 · <b>목표(%)</b>: 재료비율을 입력값으로 맞춤 → 증가액 = 매출액 × 입력값 − 기존(동+부재료비). 행·월별로 적용합니다.
+      값을 바꾸면 바로 재계산되며 보고 양식·상세·엑셀 다운로드에 반영됩니다. 값을 비우면 조정하지 않습니다 (설정은 저장되어 새 자료를 불러와도 유지).</p>
+    <div class="row" style="margin-bottom:8px"><button class="btn" id="adjAdd">조정 항목 추가</button><span class="muted" id="adjInfo"></span></div>
+    <div class="scroll"><table id="adjTable"></table></div>
+  </div>
+</section>
+
 <section class="tab" id="t-rule">
   <div class="card"><h2>A단계 계산 규칙</h2><div class="scroll"><table>
     <tr><th>항목</th><th>산식</th></tr>
@@ -191,6 +204,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
     <tr><td>동재료비 (제품)</td><td>제품 동량 × 적용동가 ÷ 1,000</td></tr>
     <tr><td>부재료비</td><td>제품: 제품 동량 × (부재료비 단가 + 포장비 단가) / 상품: 상품 금액 × 상품재료비율</td></tr>
     <tr><td>상품재료비율</td><td>상세제품군별 1~9월 상품매출원가 ÷ 원화판매금액. 실적 없는 상세제품군은 같은 제품군 비율(제품군 상세 실적 합산) → 없으면 총합계 비율 (검증 탭에 표시)</td></tr>
+    <tr><td>재료비율 조정 (⑥ 탭)</td><td>지정 상세제품군 행·월마다 증가액 = 매출액 × 가산율 (또는 매출액 × 목표율 − 기존 동+부재료비) → 동재료비에 더함</td></tr>
     <tr><td>재료비합 · 재료비율</td><td>동재료비 + 부재료비 / 재료비합 ÷ 금액</td></tr>
     <tr><td>톤당단가</td><td>금액 ÷ 동량 (동량지수)</td></tr>
   </table></div>
@@ -368,6 +382,7 @@ const LS="mc_A_v1";
 const M14=["26년 11월","26년 12월",...MONTHS];
 let state={paste:"",startCol:"auto",startRow:15,verName:"",prod:"",basis:"",ratio:"",coef:"",ovr:{basis:{},target:null,sales:{}}};
 let BASE=null;   // 수정 전(붙여넣은 값 그대로) 계산 결과
+const ADJ_DEFAULT=[{g:"전력용",d:"MV-105",mode:"add",val:null}];
 let parsed=null, P=null, B=null, RT=null, CF=null, RES=null;
 function save(){try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}}
 function load(){try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s)Object.assign(state,s);}catch(e){}}
@@ -586,10 +601,24 @@ function compute(useOvr=true){
       if(ma&&RT&&!RT.error&&rat!=null&&rf.src!=="상세"&&RT.mode==="detail") ratFb.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" → "+rf.src+" "+(rat*100).toFixed(1)+"%");
       if(pq&&price==null) missApply.add(m+1);
       const pcu=pq*(price||0)/1000, psub=pq*(unit+pack), msub=ma*(rat||0);
-      return {q,a,tw,th,mq,ma,pq,pa,price,unit,pack,pcu,psub,msub,cuT:pcu,subT:psub+msub};
+      return {q,a,tw,th,mq,ma,pq,pa,price,unit,pack,pcu,psub,msub,adj:0,cuT:pcu,subT:psub+msub};
     });
     return {row,key,cf,rat,ratSrc:rf.src,mon};
   });
+  // 재료비율 조정: 증가분 전액 동재료비
+  const ADJ=state.adj||[]; R.adjStat=ADJ.map(()=>({rows:0,a:0,cu:0,sub:0,extra:0}));
+  R.rows.forEach(rw=>{const c=rw.row.cells, g=nk(c[COL.제품군]), d=nk(c[COL.상세제품군]);
+    ADJ.forEach((aj,ai)=>{ if(nk(aj.g)!==g||nk(aj.d)!==d) return; const s=R.adjStat[ai];
+      if(rw.adjIdx!=null&&rw.adjIdx!==ai){ s.dup=true; return; }   // 같은 상세제품군 중복 항목: 첫 항목만 적용
+      s.rows++; rw.adjIdx=ai;
+      rw.mon.forEach(x=>{ s.a+=x.a; s.cu+=x.pcu; s.sub+=x.psub+x.msub;
+        if(!useOvr||aj.val==null||isNaN(aj.val)||!x.a) return;
+        const ex=aj.mode==="target"?x.a*aj.val-(x.pcu+x.psub+x.msub):x.a*aj.val;
+        x.adj+=ex; x.pcu+=ex; x.cuT=x.pcu; s.extra+=ex; });});});
+  ADJ.forEach((aj,ai)=>{ if(aj.val==null||isNaN(aj.val)||!useOvr) return; const s=R.adjStat[ai];
+    if(s.dup&&!s.rows) add("warn","재료비율 조정",aj.g+" / "+aj.d+" – 같은 상세제품군 항목이 위에 있어 적용하지 않음 (중복)");
+    else if(!s.rows) add("warn","재료비율 조정",aj.g+" / "+aj.d+" – 해당 상세제품군 행이 매출계획에 없음");
+    else add("info","재료비율 조정",aj.g+" / "+aj.d+" "+s.rows+"행: "+(aj.mode==="target"?"목표 ":"가산 +")+(aj.val*100).toFixed(2)+(aj.mode==="target"?"%":"%p")+" → 동재료비 "+(s.extra>=0?"+":"")+fmt(s.extra,1)); });
   missCoef.forEach(k=>add("err","부재료비 계수","계수 없음: "+k+" → 제품 부재료비 0"));
   missRat.forEach(g=>add("err","상품재료비율","비율 없음: "+g+" → 상품 재료비 0"));
   ratFb.forEach(t=>add("warn","상품재료비율","상세제품군 실적 없음 – 대체 비율 사용: "+t));
@@ -653,7 +682,8 @@ function runAll(keep){
   recalc();
 }
 function ovrCount(){const o=state.ovr||{};let n=o.target!=null?1:0;for(const k in o.basis||{})n+=Object.keys(o.basis[k]).length;return n+Object.keys(o.sales||{}).length;}
-function recalc(){RES=compute(true);BASE=ovrCount()&&RES.ok?compute(false):null;render();}
+function adjActive(){return (state.adj||[]).some(a=>a.val!=null&&!isNaN(a.val));}
+function recalc(){RES=compute(true);BASE=(ovrCount()||adjActive())&&RES.ok?compute(false):null;render();}
 function render(){
   const R=RES; const errs=R.issues.filter(x=>x.lvl==="err"), warns=R.issues.filter(x=>x.lvl==="warn");
   st("st-check",errs.length?"err":(warns.length?"warn":(R.ok?"ok":"")));
@@ -675,7 +705,7 @@ function render(){
     const line=(l,arr,d)=>`<tr><td>${esc(x.g)}</td><td>${l}</td>`+arr.map(v=>`<td class="n">${v==null?"":fmt(v,d)}</td>`).join("")+`<td class="n">${arr.some(v=>v==null)?"":fmt(sumA(arr),d)}</td></tr>`;
     const dq=x.pq.map((v,m)=>v==null?null:v-x.sq[m]), da=x.pa.map((v,m)=>v==null?null:v-x.sa[m]);
     return line("매출 동량",x.sq,2)+line("생산 동량(자체+OEM)",x.pq,2)+line("  └ OEM 동량",x.oq,2)+line("동량 차이",dq,2)+line("매출 금액",x.sa,1)+line("생산 금액(자체+OEM)",x.pa,1)+line("  └ OEM 금액",x.oa,1)+line("금액 차이",da,1);}).join("");
-  renderReport(); renderDetail(); bindEdits(); renderWhatIf();
+  renderReport(); renderDetail(); bindEdits(); renderWhatIf(); renderAdj();
 }
 function totalsOf(R){let a=0,q=0,cu=0,sub=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;cu+=x.cuT;sub+=x.subT;}));return {a,q,cu,sub,sum:cu+sub,rate:a?(cu+sub)/a:0};}
 function renderWhatIf(){
@@ -685,8 +715,37 @@ function renderWhatIf(){
   const card=(l,k,dec,pct)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
     return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
   const h=card("매출액 (백만원)","a",0)+card("동량 (톤)","q",3)+card("동재료비","cu",1)+card("부재료비","sub",1)+card("재료비합","sum",1)+card("재료비율","rate",0,true);
-  $("wi-cu").innerHTML=h; $("wi-det").innerHTML=h;
+  $("wi-cu").innerHTML=h; $("wi-det").innerHTML=h; $("wi-adj").innerHTML=h;
 }
+function renderAdj(){
+  const ADJ=state.adj||[], R=RES; const rows=R&&R.ok?R.rows:[];
+  const gs=[...new Set(rows.map(r=>norm(r.row.cells[COL.제품군])))];
+  const detOf=g=>[...new Set(rows.filter(r=>norm(r.row.cells[COL.제품군])===g).map(r=>norm(r.row.cells[COL.상세제품군])))];
+  const pc=v=>(v*100).toFixed(2)+"%";
+  let h="<tr><th>제품군</th><th>상세제품군</th><th>방식</th><th>요율 (%)</th><th>적용 행</th><th>연간 매출액</th><th>조정 전 동재료비율</th><th>부재료비율</th><th>조정 전 재료비율</th><th class=\"p\">조정 후 동재료비율</th><th class=\"p\">조정 후 재료비율</th><th>동재료비 증가액</th><th></th></tr>";
+  ADJ.forEach((a,i)=>{const s=R&&R.adjStat?R.adjStat[i]:null;
+    const gl=[...new Set([...gs,a.g])].filter(Boolean), dl=[...new Set([...detOf(a.g),a.d])].filter(Boolean);
+    const sel=(cls,list,v)=>`<select data-i="${i}" class="${cls}">${list.map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}</select>`;
+    const A=s?s.a:0, cu0=s?s.cu:0, sub=s?s.sub:0, ex=s?s.extra:0;
+    h+=`<tr><td>${sel("ag",gl,a.g)}</td><td>${sel("ad",dl,a.d)}</td><td><select data-i="${i}" class="am"><option value="add"${a.mode!=="target"?" selected":""}>가산 (%p)</option><option value="target"${a.mode==="target"?" selected":""}>목표 재료비율 (%)</option></select></td>
+      <td class="inp${a.val!=null?" ed":""}"><input data-i="${i}" class="av" value="${a.val==null?"":+(a.val*100).toFixed(4)}" placeholder="${a.mode==="target"?"예: 90":"예: 5"}"></td>
+      <td class="n">${s?(s.dup&&!s.rows?"중복":s.rows):"-"}</td><td class="n">${fmt(A)}</td><td class="n">${A?pc(cu0/A):"-"}</td><td class="n">${A?pc(sub/A):"-"}</td><td class="n">${A?pc((cu0+sub)/A):"-"}</td>
+      <td class="n p">${A?pc((cu0+ex)/A):"-"}</td><td class="n p">${A?pc((cu0+ex+sub)/A):"-"}</td><td class="n" style="${ex>0?"color:var(--err)":""}">${ex?(ex>0?"+":"")+fmt(ex,1):"-"}</td>
+      <td><button class="btn danger adel" data-i="${i}">삭제</button></td></tr>`;});
+  $("adjTable").innerHTML=h;
+  const act=ADJ.filter(a=>a.val!=null).length; $("adjInfo").textContent=act?`조정 적용 ${act}건`:"조정 없음 (요율을 입력하면 적용)";
+  st("st-adj",act?"warn":"");
+  const upd=fn=>e=>{const i=+e.target.dataset.i; fn(state.adj[i],e.target.value); save(); recalc(); toast("재계산했습니다");};
+  $("adjTable").querySelectorAll("select.ag").forEach(x=>x.onchange=upd((a,v)=>{a.g=v; const dl=detOf(v); if(!dl.includes(a.d)) a.d=dl[0]||"";}));
+  $("adjTable").querySelectorAll("select.ad").forEach(x=>x.onchange=upd((a,v)=>a.d=v));
+  $("adjTable").querySelectorAll("select.am").forEach(x=>x.onchange=upd((a,v)=>a.mode=v));
+  $("adjTable").querySelectorAll("input.av").forEach(x=>x.onchange=upd((a,v)=>{const n=parseNum(String(v).replace("%",""));a.val=(n==null||isNaN(n))?null:n/100;}));
+  $("adjTable").querySelectorAll(".adel").forEach(x=>x.onclick=()=>{state.adj.splice(+x.dataset.i,1);save();recalc();});
+}
+$("adjAdd").onclick=()=>{const used=new Set((state.adj||[]).map(a=>nk(a.g)+"|"+nk(a.d)));
+  const cand=(RES&&RES.ok?RES.rows:[]).map(r=>[norm(r.row.cells[COL.제품군]),norm(r.row.cells[COL.상세제품군])]).find(([g,d])=>!used.has(nk(g)+"|"+nk(d)));
+  if(!cand){toast("모든 상세제품군에 이미 조정 항목이 있습니다");return;}
+  state.adj.push({g:cand[0],d:cand[1],mode:"add",val:null});save();recalc();};
 function bindEdits(){
   $("cuTable").querySelectorAll("input").forEach(inp=>inp.onchange=()=>{const k=inp.dataset.k,i=+inp.dataset.i;const ob=state.ovr.basis;
     const raw=inp.value.trim(); const val=raw===""?null:parseNum(raw);
@@ -722,9 +781,9 @@ function renderReport(){
   });
   $("repTable").innerHTML=h;
 }
-const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가(세·태선)","unit",3],["포장비단가","pack",3],["동재료비","cuT",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
+const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가(세·태선)","unit",3],["포장비단가","pack",3],["동재료비조정","adj",1],["동재료비","cuT",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
 function dval(x,k){if(k==="sumT")return x.cuT+x.subT;if(k==="rateT")return x.a?(x.cuT+x.subT)/x.a:0;return x[k];}
-function yearRow(r){const s=k=>sumA(r.mon.map(x=>x[k]));const y={q:s("q"),a:s("a"),pq:s("pq"),mq:s("mq"),pa:s("pa"),ma:s("ma"),cuT:s("cuT"),subT:s("subT"),psub:s("psub")};
+function yearRow(r){const s=k=>sumA(r.mon.map(x=>x[k]));const y={q:s("q"),a:s("a"),pq:s("pq"),mq:s("mq"),pa:s("pa"),ma:s("ma"),cuT:s("cuT"),subT:s("subT"),psub:s("psub"),adj:s("adj")};
   const wq=k=>y.pq?sumA(r.mon.map(x=>x.pq*(x[k]||0)))/y.pq:0;
   y.price=y.pq?y.cuT*1000/y.pq:0; y.unit=wq("unit"); y.pack=wq("pack"); return y;}
 const FRONT=[["사업부","사업부"],["부서","부서"],["제품군","제품군"],["상세제품군","상세제품군"],["거래처","거래처"],["BACKLOG","BACKLOG구분"],["프로젝트","프로젝트명"],["선종","선종"],["수수료율","판매수수료율"],["운송비율","해외운송비율"],["연동","동/환 연동"],["통화","계약통화"],["세선비중","세선 비중"],["세선지수","세선 동량지수"],["태선비중","태선 비중"],["태선지수","태선 동량지수"],["수주LME","수주LME"]];
@@ -879,15 +938,15 @@ function buildWorkbook(){
   // ---------- 2) 상세 (수식) ----------
   const D=XLSX_W.Sheet("상세");
   const FR=[["엑셀행",null],...FRONT.map(f=>[f[1],f[0]])]; // A~R
-  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, MB=cS+4, MWD=16;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
-  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
+  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, cW=cS+4, cX=cS+5, MB=cS+6, MWD=17;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
+  const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비조정","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
   const mc=(m,k)=>MB+m*MWD+DK.indexOf(k);
-  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
+  const YK=["동량","매출액","상품동량","상품매출","제품동량","제품매출","동재료비조정","동재료비","제품부재료비","상품재료비","부재료비","재료비합","재료비율"];
   const YB=MB+12*MWD, yc=k=>YB+YK.indexOf(k);
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
   FR.forEach((f,i)=>{D.set(3,1+i,"",H);D.set(4,1+i,f[0],H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
-  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
+  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,"",H);D.set(4,c,l,H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
     DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품재료비"].includes(k)?HM:(["제품동량","제품매출","제품부재료비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
@@ -898,6 +957,8 @@ function buildWorkbook(){
     D.set(r,cS,rw.cf?rw.cf.s:"",NUM("n3",{fill:"inp"}));D.set(r,cT,rw.cf?rw.cf.t:"",NUM("n3",{fill:"inp"}));
     D.set(r,cU,rw.rat||0,NUM("pct",{fill:"inp"}));
     D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3",{fill:"inp"}));
+    const aj=rw.adjIdx!=null?(state.adj||[])[rw.adjIdx]:null, ajOn=aj&&aj.val!=null&&!isNaN(aj.val);
+    D.set(r,cW,ajOn&&aj.mode!=="target"?aj.val:"",NUM("pct",{fill:"inp"})); D.set(r,cX,ajOn&&aj.mode==="target"?aj.val:"",NUM("pct",{fill:"inp"}));
     rw.mon.forEach((x,m)=>{const ref=k=>C(mc(m,k))+r, pc=`${PB}!${C(3+m)}:${C(3+m)}`, crit=t=>`${PB}!$A:$A,$D${r},${PB}!$B:$B,"${t}"`;
       D.set(r,mc(m,"동량"),x.q,NUM("n2",{fill:"inp"}));D.set(r,mc(m,"매출액"),x.a,NUM("n1",{fill:"inp"}));
       D.set(r,mc(m,"세선비중"),x.tw,NUM("pct",{fill:"inp"}));D.set(r,mc(m,"태선비중"),x.th,NUM("pct",{fill:"inp"}));
@@ -907,13 +968,14 @@ function buildWorkbook(){
       D.set(r,mc(m,"제품매출"),x.pa,NUM("n1",{fill:"prod"}),`${ref("매출액")}-${ref("상품매출")}`);
       D.set(r,mc(m,"적용동가"),x.price||0,NUM("n1"),apRef(m));
       D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`${ref("세선비중")}*$${C(cS)}${r}+${ref("태선비중")}*$${C(cT)}${r}`);
-      D.set(r,mc(m,"동재료비"),x.pcu,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000`);
+      D.set(r,mc(m,"동재료비조정"),x.adj||0,NUM("n1",{fill:x.adj?"key":undefined}),`IF(N($${C(cX)}${r})>0,${ref("매출액")}*$${C(cX)}${r}-(${ref("제품동량")}*${ref("적용동가")}/1000+${ref("제품부재료비")}+${ref("상품재료비")}),${ref("매출액")}*N($${C(cW)}${r}))`);
+      D.set(r,mc(m,"동재료비"),x.pcu,NUM("n1"),`${ref("제품동량")}*${ref("적용동가")}/1000+${ref("동재료비조정")}`);
       D.set(r,mc(m,"제품부재료비"),x.psub,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*(${ref("부재료비단가")}+$${C(cV)}${r})`);
       D.set(r,mc(m,"상품재료비"),x.msub,NUM("n1",{fill:"merch"}),`${ref("상품매출")}*$${C(cU)}${r}`);
       D.set(r,mc(m,"부재료비"),x.psub+x.msub,NUM("n1"),`${ref("제품부재료비")}+${ref("상품재료비")}`);
       D.set(r,mc(m,"재료비합"),x.pcu+x.psub+x.msub,NUM("n1",{font:"b"}),`${ref("동재료비")}+${ref("부재료비")}`);
       D.set(r,mc(m,"재료비율"),x.a?(x.pcu+x.psub+x.msub)/x.a:0,NUM("pct"),`IFERROR(${ref("재료비합")}/${ref("매출액")},0)`);});
-    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비:y.cuT,제품부재료비:y.psub,상품재료비:y.subT-y.psub,부재료비:y.subT,재료비합:y.cuT+y.subT};
+    const y=yearRow(rw), yv={동량:y.q,매출액:y.a,상품동량:y.mq,상품매출:y.ma,제품동량:y.pq,제품매출:y.pa,동재료비조정:y.adj||0,동재료비:y.cuT,제품부재료비:y.psub,상품재료비:y.subT-y.psub,부재료비:y.subT,재료비합:y.cuT+y.subT};
     YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
       D.set(r,c2,yv[k],NUM(["동량","상품동량","제품동량"].includes(k)?"n2":"n1",{fill:"sub"}),MONTHS.map((_,m)=>C(mc(m,k))+r).join("+"));});
   });
@@ -1013,6 +1075,7 @@ load();
 $("in-sales").value=state.paste||"";$("in-prod").value=state.prod||"";$("in-basis").value=state.basis||"";$("in-ratio").value=state.ratio||"";$("in-coef").value=state.coef||"";
 $("verName").value=state.verName||"";$("startCol").value=state.startCol||"auto";$("startRow").value=state.startRow||15;
 state.ovr=state.ovr||{basis:{},target:null,sales:{}};
+if(!Array.isArray(state.adj)) state.adj=JSON.parse(JSON.stringify(ADJ_DEFAULT));
 if(state.paste||state.basis) runAll(true);
 </script>
 </body>
