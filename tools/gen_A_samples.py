@@ -107,23 +107,23 @@ for r in range(10,ix.max_row+1):
     if r==10: row[19]="부재료비 계수 (백만원/톤)"; row[22]="포장비 계수"
     if r==11: row[19]="TOTAL"; row[20]="세선"; row[21]="태선"
     if r>=12 and ix.cell(r,3).value:
-        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0123,2.5321)); row[20]=cs; row[21]=ct; row[19]=round((cs+ct)/2,3); row[22]=PACKW
+        cs,ct=COEF.get(str(ix.cell(r,4).value),(4.0123,2.5321)); row[20]=cs; row[21]=ct; row[19]=round(cs*0.32+ct*0.68,6); row[22]=PACKW
     if any(str(x).strip() for x in row): coef.append(row)
 def coefOf(g,det,cust,cur):
     for row in coef[2:]:
-        if (row[2],row[3],row[4],row[5])==(g,det,cust,cur): return row[20],row[21]
+        if (row[2],row[3],row[4],row[5])==(g,det,cust,cur): return row[19]   # T열 일괄 부재료비 단가
     return None
 # ---- 기대값 (Python 독립 계산)
 apply=[bp[m+1] for m in range(12)]
 tot={'q':0,'a':0,'cu':0,'sub':0,'pq':0,'mq':0,'ma':0,'msub':0}
 for d in sales:
     if d['biz']!='선박선': continue
-    cs,ct=coefOf(d['g'],d['det'],d['cust'],d['cur'])
+    tt=coefOf(d['g'],d['det'],d['cust'],d['cur'])
     for m in range(12):
         q,a=d['q'][m],d['a'][m]; g=d['g']
         Gq,Ga=G[g]['q'][m],G[g]['a'][m]
         oq=P[g]['OEM']['q'][m]*q/Gq if Gq else 0; oa=P[g]['OEM']['a'][m]*a/Ga if Ga else 0
-        pq=q-oq; unit=d['tw'][m]*cs+d['th'][m]*ct+PACKW
+        pq=q-oq; unit=tt+PACKW   # 세·태선 비중 미사용
         mcu=oq*apply[m]/1000; msub=oa*ratOf(g,d['det'])-mcu   # 상품: 동재료비 = 상품 동량×적용동가, 부재료비 = 상품 매출×비율 − 상품 동재료비
         cu=pq*apply[m]/1000+mcu; sub=pq*unit+msub
         tot['q']+=q; tot['a']+=a; tot['cu']+=cu; tot['sub']+=sub; tot['pq']+=pq; tot['mq']+=oq; tot['ma']+=oa; tot['msub']+=msub

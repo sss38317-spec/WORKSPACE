@@ -124,7 +124,7 @@ function buildWorkbook(){
   // ---------- 2) 상세 (수식) ----------
   const D=XLSX_W.Sheet("상세");
   const FR=[["엑셀행",null],...FRONT.map(f=>[f[1],f[0]])]; // A~R
-  const cS=FR.length+1, cT=cS+1, cU=cS+2, cV=cS+3, cW=cS+4, cX=cS+5, MB=cS+6;   // 계수 세선(S), 태선(T), 상품재료비율(U), 포장비단가(V), 월 블록 시작
+  const cS=FR.length+1, cU=cS+1, cV=cS+2, cW=cS+3, cX=cS+4, MB=cS+5;   // 일괄 부재료비 단가(S), 상품재료비율, 포장비단가, 가산, 목표, 월 블록 시작
   const DK=["동량","매출액","세선비중","태선비중","상품동량","상품매출","제품동량","제품매출","적용동가","부재료비단가","동재료비조정","제품동재료비","상품동재료비","동재료비","제품부재료비","상품부재료비","부재료비","재료비합","재료비율"];
   const MWD=DK.length;
   const mc=(m,k)=>MB+m*MWD+DK.indexOf(k);
@@ -133,7 +133,7 @@ function buildWorkbook(){
   const r0=5, rN=r0+R.rows.length-1;
   D.set(1,1,"재료비 상세 (선박선, 영업 매출계획 행 기준) – 노란 칸 입력값, 나머지 수식",T);
   FR.forEach((f,i)=>{D.set(3,1+i,f[0],H);D.set(4,1+i,"",H);D.merges.push(`${C(1+i)}3:${C(1+i)}4`);});
-  [[cS,"세선 부재료비 계수"],[cT,"태선 부재료비 계수"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,l,H);D.set(4,c,"",H);D.merges.push(`${C(c)}3:${C(c)}4`);});
+  [[cS,"부재료비 단가(일괄)"],[cU,"상품재료비율"],[cV,"포장비단가"],[cW,"재료비율 가산(%p)"],[cX,"목표 재료비율"]].forEach(([c,l])=>{D.set(3,c,l,H);D.set(4,c,"",H);D.merges.push(`${C(c)}3:${C(c)}4`);});
   for(let m=0;m<12;m++){D.set(3,MB+m*MWD,(m+1)+"월",H);D.merges.push(`${C(MB+m*MWD)}3:${C(MB+m*MWD+MWD-1)}3`);
     DK.forEach((k,j)=>{D.set(4,MB+m*MWD+j,k,["상품동량","상품매출","상품동재료비","상품부재료비"].includes(k)?HM:(["제품동량","제품매출","제품동재료비","제품부재료비"].includes(k)?HP:H));if(j)D.set(3,MB+m*MWD+j,"",H);});}
   D.set(3,YB,"연간",H);D.merges.push(`${C(YB)}3:${C(YB+YK.length-1)}3`);YK.forEach((k,j)=>{D.set(4,YB+j,k,H);if(j)D.set(3,YB+j,"",H);});
@@ -141,7 +141,7 @@ function buildWorkbook(){
   const PB="'상품배분'";
   R.rows.forEach((rw,i)=>{const r=r0+i, c=rw.row.cells;
     D.set(r,1,rw.row.excelRow,TX); FRONT.forEach((f,j)=>{const v=c[COL[f[0]]];const nv=parseNum(v);D.set(r,2+j,(nv!=null&&!isNaN(nv)&&j>=8)?nv:norm(v),j>=8?NUM(j>=12&&j<=15?"n3":"n2"):TX);});
-    D.set(r,cS,rw.cf?rw.cf.s:"",NUM("n3",{fill:"inp"}));D.set(r,cT,rw.cf?rw.cf.t:"",NUM("n3",{fill:"inp"}));
+    D.set(r,cS,rw.cf&&rw.cf.tot!=null?rw.cf.tot:"",NUM("n3",{fill:"inp"}));
     D.set(r,cU,rw.rat||0,NUM("pct",{fill:"inp"}));
     D.set(r,cV,rw.mon[0]?rw.mon[0].pack:0,NUM("n3",{fill:"inp"}));
     const aj=rw.adjIdx!=null?(state.adj||[])[rw.adjIdx]:null, ajOn=aj&&aj.val!=null&&!isNaN(aj.val);
@@ -154,7 +154,7 @@ function buildWorkbook(){
       D.set(r,mc(m,"제품동량"),x.pq,NUM("n2",{fill:"prod"}),`${ref("동량")}-${ref("상품동량")}`);
       D.set(r,mc(m,"제품매출"),x.pa,NUM("n1",{fill:"prod"}),`${ref("매출액")}-${ref("상품매출")}`);
       D.set(r,mc(m,"적용동가"),x.price||0,NUM("n1"),apRef(m));
-      D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`${ref("세선비중")}*$${C(cS)}${r}+${ref("태선비중")}*$${C(cT)}${r}`);
+      D.set(r,mc(m,"부재료비단가"),x.unit,NUM("n3"),`$${C(cS)}${r}`);
       D.set(r,mc(m,"동재료비조정"),x.adj||0,NUM("n1",{fill:x.adj?"key":undefined}),`IF(N($${C(cX)}${r})>0,${ref("매출액")}*$${C(cX)}${r}-(${ref("제품동량")}*${ref("적용동가")}/1000+${ref("제품부재료비")}+${ref("상품매출")}*$${C(cU)}${r}),${ref("매출액")}*N($${C(cW)}${r}))`);
       D.set(r,mc(m,"제품동재료비"),x.pcu,NUM("n1",{fill:"prod"}),`${ref("제품동량")}*${ref("적용동가")}/1000+${ref("동재료비조정")}`);
       D.set(r,mc(m,"상품동재료비"),x.mcu,NUM("n1",{fill:"merch"}),`${ref("상품동량")}*${ref("적용동가")}/1000`);
@@ -168,7 +168,7 @@ function buildWorkbook(){
     YK.forEach(k=>{const c2=yc(k);if(k==="재료비율"){D.set(r,c2,y.a?(y.cuT+y.subT)/y.a:0,NUM("pct",{fill:"sub"}),`IFERROR(${C(yc("재료비합"))}${r}/${C(yc("매출액"))}${r},0)`);return;}
       D.set(r,c2,yv[k],NUM(["동량","상품동량","제품동량"].includes(k)?"n2":"n1",{fill:"sub"}),MONTHS.map((_,m)=>C(mc(m,k))+r).join("+"));});
   });
-  autoWidth(D,[3,4],5,rN); D.cols[cS]=Math.max(D.cols[cS]||0,17); D.cols[cT]=Math.max(D.cols[cT]||0,17); D.cols[cW]=Math.max(D.cols[cW]||0,18); D.cols[cX]=Math.max(D.cols[cX]||0,15); D.heights[3]=30; D.heights[4]=42;
+  autoWidth(D,[3,4],5,rN); D.cols[cS]=Math.max(D.cols[cS]||0,17); D.cols[cW]=Math.max(D.cols[cW]||0,18); D.cols[cX]=Math.max(D.cols[cX]||0,15); D.heights[3]=30; D.heights[4]=42;
   D.freeze=[5,7]; D.filter=`A4:${C(YB+YK.length-1)}${Math.max(rN,4)}`;
   // ---------- 3) 상품배분 ----------
   const PBs=XLSX_W.Sheet("상품배분");

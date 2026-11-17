@@ -117,7 +117,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
       <textarea id="in-ratio" placeholder="여기에 붙여넣기 (Ctrl+V)" style="height:90px"></textarea>
       <div class="muted" id="info-ratio"></div>
       <h2 style="margin-top:12px">5. 재료비 기준 · 동량지수_부재료비 <span class="st" id="st-coef"></span></h2>
-      <p class="help">'동량지수_부재료비' 시트 <b>10행(머리글)부터 총계 행까지, A~W열</b>. 키 = 제품군+상세+거래선+통화, U·V열 = 세선·태선 부재료비 계수, W열 = 포장비 계수 (모두 백만원/톤).</p>
+      <p class="help">'동량지수_부재료비' 시트 <b>10행(머리글)부터 총계 행까지, A~W열</b>. 키 = 제품군+상세+거래선+통화, <b>T열 = 일괄 부재료비 단가(TOTAL)</b>, W열 = 포장비 계수 (모두 백만원/톤).</p>
       <textarea id="in-coef" placeholder="여기에 붙여넣기 (Ctrl+V)" style="height:90px"></textarea>
       <div class="muted" id="info-coef"></div>
     </div>
@@ -206,7 +206,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
     <tr><td>상품 동량 / 금액</td><td>제품군 OEM 동량 × (거래처 동량 ÷ 제품군 동량) / 제품군 OEM 금액 × (거래처 매출 ÷ 제품군 매출)</td></tr>
     <tr><td>제품 동량 / 금액</td><td>거래처 전체 − 상품</td></tr>
     <tr><td>포장비 단가 (백만원/톤)</td><td>동량지수_부재료비 시트 W열 '포장비 계수' (행별, 현재 26년 1~9월 포장비 ÷ 동량 일괄값). 제품에만 적용</td></tr>
-    <tr><td>부재료비 단가 (백만원/톤)</td><td>세선비중 × 세선 계수 + 태선비중 × 태선 계수 (계수 = 26년 세·태선별 부재료비 ÷ 동량, 원/kg ÷ 1,000) (계수: 동량지수_부재료비 U·V열, 키 = 제품군+상세+거래선+통화)</td></tr>
+    <tr><td>부재료비 단가 (백만원/톤)</td><td>동량지수_부재료비 시트 T열 '부재료비 계수 TOTAL' 일괄 단가 (= 26년 부재료비 ÷ 동량, 원/kg ÷ 1,000). 세·태선 비중은 사용하지 않음. 키 = 제품군+상세+거래선+통화</td></tr>
     <tr><td>동재료비</td><td>제품: 제품 동량 × 적용동가 ÷ 1,000 / 상품: 상품 동량 × 적용동가 ÷ 1,000 (제품과 동일)</td></tr>
     <tr><td>부재료비</td><td>제품: 제품 동량 × (부재료비 단가 + 포장비 단가) / 상품: 상품 금액 × 상품재료비율 − 상품 동재료비</td></tr>
     <tr><td>상품재료비율</td><td>상세제품군별 1~9월 상품매출원가 ÷ 원화판매금액. 실적 없는 상세제품군은 같은 제품군 비율(제품군 상세 실적 합산) → 없으면 총합계 비율 (검증 탭에 표시)</td></tr>
@@ -351,15 +351,16 @@ function parseCoef(text){
   if(hr<0) return {error:"'부재료비 계수' 머리글을 찾지 못했습니다 (10행부터 붙여넣으세요)."};
   const H=raw[hr].map(norm), H2=(raw[hr+1]||[]).map(norm);
   const k0=H.findIndex(x=>x.startsWith("부재료비 계수"));
-  const cs=H2.findIndex((x,c)=>c>=k0&&x==="세선"), ct=H2.findIndex((x,c)=>c>=k0&&x==="태선");
+  const c0=H2.findIndex((x,c)=>c>=k0&&x.toUpperCase()==="TOTAL");   // T열: 일괄 부재료비 단가
+  const cs=H2.findIndex((x,c)=>c>=k0&&x==="세선"), ct=H2.findIndex((x,c)=>c>=k0&&x==="태선");   // 참고용 (계산에 사용 안 함)
   const cg=H.indexOf("제품군"), cd=H.indexOf("상세"), cc=H.findIndex(x=>x.endsWith("거래선")), cu=H.indexOf("통화");
   const cw=H.findIndex(x=>x.startsWith("포장비"));   // 포장비 계수 (백만원/톤, 행별)
-  if([cs,ct,cg,cd,cc,cu].some(x=>x<0)) return {error:"제품군·상세·영업거래선·통화·세선·태선 머리글을 모두 찾지 못했습니다."};
+  if([c0,cg,cd,cc,cu].some(x=>x<0)) return {error:"제품군·상세·영업거래선·통화 머리글과 '부재료비 계수' 아래 'TOTAL'(T열) 머리글을 찾지 못했습니다."};
   const m={}; let n=0, blank=0; const dc=decTrack(), dp=decTrack();
   const num=v=>{const x=parseNum(v);return x==null||isNaN(x)?null:x;};
   for(let i=hr+2;i<raw.length;i++){const r=raw[i]; if(!norm(r[cg])) continue;
     const key=nk(r[cg])+"|"+nk(r[cd])+"|"+nk(r[cc])+"|"+nk(r[cu]);
-    m[key]={s:num(r[cs]),t:num(r[ct]),p:cw>=0?num(r[cw]):null}; n++; dc.add(r[cs]); dc.add(r[ct]); if(cw>=0) dp.add(r[cw]); if(m[key].s==null&&m[key].t==null) blank++;}
+    m[key]={tot:num(r[c0]),s:cs>=0?num(r[cs]):null,t:ct>=0?num(r[ct]):null,p:cw>=0?num(r[cw]):null}; n++; dc.add(r[c0]); if(cw>=0) dp.add(r[cw]); if(m[key].tot==null) blank++;}
   const pv=[...new Set(Object.values(m).map(x=>x.p).filter(x=>x!=null).map(x=>+x.toFixed(4)))];
   return {m,n,blank,hasPack:cw>=0,packVals:pv,dc,dp};
 }
@@ -381,7 +382,7 @@ function compute(useOvr=true){
     add(trk.max===0?"err":"warn",where,what+"이(가) 소수 "+trk.max+"자리까지만 붙여넣어졌습니다 – 엑셀은 화면에 표시된 값만 복사합니다. 해당 칸 셀 서식을 소수 "+need+"자리 이상(예: #,##0."+"0".repeat(need)+")으로 바꾼 뒤 다시 복사하세요.");};
   if(P&&!P.error) precMsg("생산계획",P.dq,3,"생산계획 동량");
   if(B&&!B.error) precMsg("재료비동가",B.dq,3,"제품 총동량·선물잔량");
-  if(CF&&!CF.error){ precMsg("동량지수_부재료비",CF.dc,4,"세·태선 부재료비 계수"); precMsg("동량지수_부재료비",CF.dp,4,"포장비 계수"); }
+  if(CF&&!CF.error){ precMsg("동량지수_부재료비",CF.dc,4,"부재료비 계수(T열 TOTAL)"); precMsg("동량지수_부재료비",CF.dp,4,"포장비 계수"); }
   if(!B||B.error) return R;
   const Pg=P&&!P.error?P.g:{}, coefM=CF&&!CF.error?CF.m:{}, ratM=RT&&!RT.error?RT.m:{};
   // 1) 적용동가
@@ -446,11 +447,11 @@ function compute(useOvr=true){
       const Gq=G[g].q[m], Ga=G[g].a[m];
       const mq=p&&Gq?p.OEM.q[m+2]*q/Gq:0, ma=p&&Ga?p.OEM.a[m+2]*a/Ga:0;
       const pq=q-mq, pa=a-ma, price=apply[m];
-      const unit=cf?tw*(cf.s||0)+th*(cf.t||0):0;
+      const unit=cf&&cf.tot!=null?cf.tot:0;   // 일괄 부재료비 단가 (세·태선 비중 미사용)
       const packRaw=packSrc==="coef"?(cf&&cf.p!=null?cf.p:(packM[g]!=null?packM[g]:null)):(packSrc==="group"?packM[g]:0);
       const pack=packRaw||0;
       if(pq0(q,a)&&packSrc&&packRaw==null) missPack.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
-      if((q||a)&&CF&&!CF.error&&(!cf||(cf.s==null&&cf.t==null))) missCoef.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
+      if((q||a)&&CF&&!CF.error&&(!cf||cf.tot==null)) missCoef.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" / "+norm(c[COL.거래처])+" / "+norm(c[COL.통화]));
       if(ma&&RT&&!RT.error&&(rat==null)) missRat.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군]));
       if(ma&&RT&&!RT.error&&rat!=null&&rf.src!=="상세"&&RT.mode==="detail") ratFb.add(norm(c[COL.제품군])+" / "+norm(c[COL.상세제품군])+" → "+rf.src+" "+(rat*100).toFixed(1)+"%");
       if(pq&&price==null) missApply.add(m+1);
@@ -663,7 +664,7 @@ function renderReport(){
   });
   $("repTable").innerHTML=h;
 }
-const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가(세·태선)","unit",3],["포장비단가","pack",3],["동재료비조정","adj",1],["상품동재료비","mcu",1],["동재료비","cuT",1],["상품부재료비","msub",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
+const DCOLS=[["동량","q",2],["매출액","a",1],["제품동량","pq",2],["상품동량","mq",2],["제품매출","pa",1],["상품매출","ma",1],["적용동가","price",0],["부재료비단가(일괄)","unit",3],["포장비단가","pack",3],["동재료비조정","adj",1],["상품동재료비","mcu",1],["동재료비","cuT",1],["상품부재료비","msub",1],["부재료비","subT",1],["재료비합","sumT",1],["재료비율","rateT",3]];
 function dval(x,k){if(k==="sumT")return x.cuT+x.subT;if(k==="rateT")return x.a?(x.cuT+x.subT)/x.a:0;return x[k];}
 function yearRow(r){const s=k=>sumA(r.mon.map(x=>x[k]));const y={q:s("q"),a:s("a"),pq:s("pq"),mq:s("mq"),pa:s("pa"),ma:s("ma"),cuT:s("cuT"),subT:s("subT"),psub:s("psub"),adj:s("adj"),pcu:s("pcu"),mcu:s("mcu"),msub:s("msub")};
   const wq=k=>y.pq?sumA(r.mon.map(x=>x.pq*(x[k]||0)))/y.pq:0;
