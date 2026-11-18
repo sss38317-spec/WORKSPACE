@@ -60,6 +60,7 @@ th.p,td.p{background:var(--prod)} th.m,td.m{background:var(--merch)}
 td.inp{background:var(--input);padding:0}td.inp input{width:84px;border:0;background:transparent;text-align:right;font:inherit;color:var(--accent);padding:3px 6px}
 td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:700;color:var(--warn)}
 .kpi .v .sh{font-size:13px;font-weight:600;color:var(--muted);margin-left:4px}.kpi .v.sm{font-size:15px;line-height:1.45}.kpi .v .lb{font-size:12px;font-weight:600;color:var(--muted);margin-right:2px}
+.kpi .v .sl{font-size:12.5px;font-weight:600;color:var(--text,inherit);margin-top:3px}.kpi .v .sl .sh{font-size:12px}
 .kpi .d{font-size:12px;font-variant-numeric:tabular-nums}.kpi .d.up{color:var(--err)}.kpi .d.dn{color:var(--ok)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.on{opacity:.95}
@@ -816,8 +817,14 @@ function renderReport(){
   sg.innerHTML='<option value="">전체</option>'+gl.map(g=>`<option>${esc(g)}</option>`).join(""); sg.value=gl.includes(pv)?pv:"";
   const tot=REP[REP.length-1]; const Y=(b,k)=>lineVal(b,k,"Y");
   const TA=Y(tot.T,"a"), TQ=Y(tot.T,"q");
+  // 제품재료비 = 제품 동재료비 + 부재료비(포장비 포함), 비율은 제품 매출 대비 / 상품재료비 비율은 상품 매출 대비
+  const PA=Y(tot.P,"a"), PC=Y(tot.P,"cu"), PS=Y(tot.P,"sub"), MA=Y(tot.M,"a"), MQ=Y(tot.M,"q"), MM=Y(tot.M,"mm");
+  // 27년 가중평균 동단가 = Σ(월 전체 동량 × 월 적용동가) ÷ Σ 월 전체 동량 (원/kg) → 상품 동재료비(참고) = 상품동량 × 가중평균 ÷ 1,000
+  const wq=tot.T.q.reduce((t,q)=>t+q,0), WAP=wq?tot.T.q.reduce((t,q,m)=>t+q*(RES.apply[m]||0),0)/wq:0, MCU=MQ*WAP/1000;
   $("kpis").innerHTML=[["매출액 (백만원)",fmt(TA)],["동량 계 (톤)",fmt(TQ)],["제품 / 상품 동량 (톤)",'<span class="lb">제품</span> '+fmt(Y(tot.P,"q"))+shr(Y(tot.P,"q"),TQ)+'<br><span class="lb">상품</span> '+fmt(Y(tot.M,"q"))+shr(Y(tot.M,"q"),TQ),"sm"],
-    ["동재료비",fmt(Y(tot.T,"cu"))+shr(Y(tot.T,"cu"),TA)],["부재료비",fmt(Y(tot.T,"sub"))+shr(Y(tot.T,"sub"),TA)],["재료비합",fmt(Y(tot.T,"sum"))+shr(Y(tot.T,"sum"),TA)],["재료비율",fmtL("rate",Y(tot.T,"rate"))]]
+    ["제품재료비 (백만원)",fmt(PC+PS)+shr(PC+PS,PA)+`<div class="sl">동재료비 ${fmt(PC)}${shr(PC,PA)}</div><div class="sl">부재료비 ${fmt(PS)}${shr(PS,PA)} <span class="lb">*포장비 포함</span></div>`],
+    ["상품재료비 (백만원)",fmt(MM)+shr(MM,MA)+`<div class="sl">동재료비 ${fmt(MCU)} 포함${shr(MCU,MA)}</div><div class="sl"><span class="lb">상품동량 ${fmt(MQ,1)}톤 × 27년 가중평균 동단가 ${fmt(WAP)}원/kg</span></div>`],
+    ["재료비합",fmt(Y(tot.T,"sum"))+shr(Y(tot.T,"sum"),TA)],["재료비율",fmtL("rate",Y(tot.T,"rate"))]]
     .map(([l,v,c])=>`<div class="kpi"><div class="l">${l}</div><div class="v${c?" "+c:""}">${v}</div></div>`).join("");
   const ms=view==="year"?["Y"]:[...MONTHS.map((_,m)=>m),"Y"]; const ml=m=>m==="Y"?"연간":(m+1)+"월";
   let h=`<tr><th rowspan="2">제품군</th><th rowspan="2">상세분류</th><th rowspan="2">거래처</th><th rowspan="2">부서</th><th rowspan="2">구분</th><th colspan="${ms.length}">매출 전체</th><th class="p" colspan="${ms.length}">제품 (동재료비·부재료비)</th><th class="m" colspan="${ms.length}">상품 (상품재료비 = 금액 × 상품재료비율)</th></tr><tr>`+
