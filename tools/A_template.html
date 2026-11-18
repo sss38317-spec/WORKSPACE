@@ -566,18 +566,21 @@ function render(){
     return line("매출 동량",x.sq,2)+line("생산 동량(자체+OEM)",x.pq,2)+line("  └ OEM 동량",x.oq,2)+line("동량 차이",dq,2)+line("매출 금액",x.sa,1)+line("생산 금액(자체+OEM)",x.pa,1)+line("  └ OEM 금액",x.oa,1)+line("금액 차이",da,1);}).join("");
   renderReport(); renderDetail(); bindEdits(); renderWhatIf(); renderAdj();
 }
-function totalsOf(R){let a=0,q=0,pq=0,mq=0,cu=0,sub=0,mm=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;pq+=x.pq;mq+=x.mq;cu+=x.cuT;sub+=x.subT;mm+=x.mtot;}));return {a,q,pq,mq,cu,sub,mm,sum:cu+sub+mm,rate:a?(cu+sub+mm)/a:0};}
+function totalsOf(R){let a=0,q=0,pq=0,mq=0,cu=0,sub=0,mm=0,ppk=0;R.rows.forEach(r=>r.mon.forEach(x=>{a+=x.a;q+=x.q;pq+=x.pq;mq+=x.mq;cu+=x.cuT;sub+=x.subT;mm+=x.mtot;ppk+=x.ppk;}));return {a,q,pq,mq,cu,sub,mm,ppk,sum:cu+sub+mm,rate:a?(cu+sub+mm)/a:0};}
 const shr=(v,base)=>`<span class="sh">(${base?(v/base*100).toFixed(1):"0.0"}%)</span>`;
 function renderWhatIf(){
   const n=ovrCount(); document.querySelectorAll(".ovrReset").forEach(b=>{b.textContent=`수정 ${n}칸 · 모두 되돌리기`;b.disabled=!n;});
   $("tgt").value=RES.target; $("tgtInfo").textContent=state.ovr.target!=null?`(붙여넣은 값 ${fmt(B.target)} → 수정)`:"(붙여넣은 값)";
   const T=totalsOf(RES), B0=BASE?totalsOf(BASE):null;
-  const card=(l,k,dec,pct,base)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
-    return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}${base?shr(v,T[base]):""}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
+  const card=(l,k,dec,pct,base,extra)=>{const v=T[k], d=B0?v-B0[k]:0;const f=x=>pct?(x*100).toFixed(2)+"%":fmt(x,dec);
+    return `<div class="kpi"><div class="l">${l}</div><div class="v">${f(v)}${base?shr(v,T[base]):""}${extra||""}</div>${B0?`<div class="d ${d>1e-9?"up":(d<-1e-9?"dn":"")}">수정 전 ${f(B0[k])} · ${Math.abs(d)<1e-9?"변동 없음":(d>0?"+":"")+(pct?(d*100).toFixed(2)+"%p":fmt(d,dec))}</div>`:'<div class="d muted">수정 없음</div>'}</div>`;};
   const qd=B0?`<div class="d muted">수정 전 제품 ${fmt(B0.pq)} / 상품 ${fmt(B0.mq)}</div>`:'<div class="d muted">전체 동량 대비 비중</div>';
   const qcard=`<div class="kpi"><div class="l">제품 / 상품 동량 (톤)</div><div class="v sm"><span class="lb">제품</span> ${fmt(T.pq)}${shr(T.pq,T.q)}<br><span class="lb">상품</span> ${fmt(T.mq)}${shr(T.mq,T.q)}</div>${qd}</div>`;
   const h=card("매출액 (백만원)","a",0)+card("동량 (톤)","q",0)+qcard+card("동재료비","cu",0,false,"a")+card("부재료비 (포장비 포함)","sub",0,false,"a")+card("상품재료비","mm",0,false,"a")+card("재료비합","sum",0,false,"a")+card("재료비율","rate",0,true);
-  $("wi-cu").innerHTML=h; $("wi-det").innerHTML=h; $("wi-adj").innerHTML=h;
+  // ⑤ 상세: 부재료비 카드 하단에 포장비 금액 (매출 대비 비율)
+  const pk=`<div class="sl">포장비 ${fmt(T.ppk)}${shr(T.ppk,T.a)}${B0&&Math.abs(T.ppk-B0.ppk)>1e-9?` <span class="lb">수정 전 ${fmt(B0.ppk)}</span>`:""}</div>`;
+  const hd=h.replace(card("부재료비 (포장비 포함)","sub",0,false,"a"),card("부재료비 (포장비 포함)","sub",0,false,"a",pk));
+  $("wi-cu").innerHTML=h; $("wi-det").innerHTML=hd; $("wi-adj").innerHTML=h;
 }
 function renderAdj(){
   const ADJ=state.adj||[], R=RES; const rows=R&&R.ok?R.rows:[];
