@@ -182,15 +182,15 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
   <div class="kpis" id="wi-adj"></div>
   <div class="card">
     <h2>재료비율 조정 (증가분 전액 동재료비 반영)</h2>
-    <p class="help">동량지수 오류 등으로 실제 재료비율(동+부재료)을 올려야 하는 상세제품군에 요율을 넣으면, <b>늘어나는 재료비를 모두 동재료비에 더해</b> 동재료비율이 올라갑니다 (부재료비는 그대로).
+    <p class="help">동량지수 오류 등으로 실제 재료비율을 올려야 하는 <b>거래처</b>에 요율을 넣으면 (제품군 '(전체)' = 모든 제품군의 그 거래처), <b>늘어나는 재료비를 모두 동재료비에 더해</b> 동재료비율이 올라갑니다 (부재료비는 그대로).
       <b>가산(%p)</b>: 재료비율 + 입력값 → 증가액 = 매출액 × 입력값 · <b>목표(%)</b>: 재료비율을 입력값으로 맞춤 → 증가액 = 매출액 × 입력값 − 기존(동+부재료비). 행·월별로 적용합니다.
       값을 바꾸면 바로 재계산되며 보고 양식·상세·엑셀 다운로드에 반영됩니다. 값을 비우면 조정하지 않습니다 (설정은 저장되어 새 자료를 불러와도 유지).</p>
     <div class="row" style="margin-bottom:8px"><button class="btn" id="adjAdd">조정 항목 추가</button><span class="muted" id="adjInfo"></span></div>
     <div class="scroll"><table id="adjTable"></table></div>
   </div>
   <div class="card">
-    <h2>붙여넣은 매출계획의 제품군 · 상세제품군 목록</h2>
-    <p class="help">조정 항목이 연결되지 않을 때(적용 행 0) 실제 이름을 여기서 확인하세요. 조정 항목과 비슷한 이름은 노란색으로 표시됩니다. <b>선박선 줄을 누르면 첫 번째 조정 항목의 제품군·상세제품군이 그 값으로 바뀝니다.</b> 선박선이 아닌 사업부는 계산 대상이 아닙니다.</p>
+    <h2>붙여넣은 매출계획의 제품군 · 거래처 목록</h2>
+    <p class="help">조정 항목이 연결되지 않을 때(적용 행 0) 실제 이름을 여기서 확인하세요. 조정 항목과 비슷한 이름은 노란색으로 표시됩니다. <b>선박선 줄을 누르면 첫 번째 조정 항목의 제품군·거래처가 그 값으로 바뀝니다.</b> 선박선이 아닌 사업부는 계산 대상이 아닙니다.</p>
     <div class="scroll" style="max-height:420px"><table id="adjList"></table></div>
   </div>
 </section>
@@ -213,7 +213,7 @@ td.ed{outline:2px solid var(--warn);outline-offset:-2px}td.ed input{font-weight:
     <tr><td>부재료비 (결과)</td><td>제품 부재료비(제품 동량 × 부재료비 단가) + 포장비. 상품은 포함하지 않음</td></tr>
     <tr><td>상품재료비</td><td>상품 금액 × 상품재료비율 (동·부재료비로 나누지 않고 한 줄로 표시)</td></tr>
     <tr><td>상품재료비율</td><td>상세제품군별 1~9월 상품매출원가 ÷ 원화판매금액. 실적 없는 상세제품군은 같은 제품군 비율(제품군 상세 실적 합산) → 없으면 총합계 비율 (검증 탭에 표시)</td></tr>
-    <tr><td>재료비율 조정 (⑥ 탭)</td><td>지정 상세제품군 행·월마다 증가액 = 매출액 × 가산율 (또는 매출액 × 목표율 − 기존 재료비합) → 제품 동재료비에 더함</td></tr>
+    <tr><td>재료비율 조정 (⑥ 탭)</td><td>지정 거래처(제품군 지정 또는 전체) 행·월마다 증가액 = 매출액 × 가산율 (또는 매출액 × 목표율 − 기존 재료비합) → 제품 동재료비에 더함</td></tr>
     <tr><td>재료비합 · 재료비율</td><td>동재료비 + 부재료비 + 상품재료비 / 재료비합 ÷ 금액</td></tr>
     <tr><td>톤당단가</td><td>금액 ÷ 동량 (동량지수)</td></tr>
   </table></div>
@@ -230,7 +230,7 @@ const LS="mc_A_v1";
 const M14=["26년 11월","26년 12월",...MONTHS];
 let state={paste:"",startCol:"auto",startRow:15,verName:"",prod:"",basis:"",ratio:"",coef:"",ovr:{basis:{},target:null,sales:{}}};
 let BASE=null;   // 수정 전(붙여넣은 값 그대로) 계산 결과
-const ADJ_DEFAULT=[{g:"전력용",d:"MV-105",mode:"add",val:null}];
+const ADJ_DEFAULT=[{g:"(전체)",d:"MV-105",mode:"add",val:null}];
 let parsed=null, P=null, B=null, RT=null, CF=null, RES=null;
 function save(){try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}}
 function load(){try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s)Object.assign(state,s);}catch(e){}}
@@ -242,10 +242,10 @@ const pq0=(q,a)=>!!(q||a);
 const nkx=v=>nk(v).replace(/[-_\/.·]/g,"");
 function adjWhy(s){
   if(s.rows&&!s.a) return "해당 행 매출액이 모두 0";
-  if(s.dup) return "같은 상세제품군 항목이 위에 있음 (중복)";
+  if(s.dup) return "같은 거래처 항목이 위에 있음 (중복)";
   if(s.other) return "사업부 '"+[...s.biz].join(", ")+"' 행이라 계산 대상(선박선)이 아님";
-  if(s.detG&&s.detG.size) return "이 상세제품군은 제품군 '"+[...s.detG].join(", ")+"'에 있음 – 제품군을 바꾸세요";
-  return "매출계획(선박선)에 이 제품군·상세제품군 행이 없음 – 이름을 확인하세요";
+  if(s.detG&&s.detG.size) return "이 거래처는 제품군 '"+[...s.detG].join(", ")+"'에 있음 – 제품군을 바꾸거나 '(전체)'로 두세요";
+  return "매출계획(선박선)에 이 거래처 행이 없음 – 이름을 확인하세요";
 }
 // 붙여넣은 글자의 소수 자릿수 (엑셀은 표시된 값만 복사 → 서식 때문에 잘렸는지 확인)
 const decs=v=>{const t=String(v??"").trim().replace(/[,\s]/g,"");const m=t.match(/\.(\d+)/);return m?m[1].length:0;};
@@ -466,14 +466,15 @@ function compute(useOvr=true){
   });
   // 재료비율 조정: 증가분 전액 동재료비
   const ADJ=state.adj||[]; R.adjStat=ADJ.map(()=>({rows:0,a:0,cu:0,sub:0,extra:0,other:0,biz:new Set(),detG:new Set()}));
-  // 진단: 선박선 외 사업부 행, 다른 제품군에 있는 같은 상세제품군
+  // 진단: 선박선 외 사업부 행, 다른 제품군에 있는 같은 거래처
+  const gOK=(aj,g)=>norm(aj.g)==="(전체)"||nkx(aj.g)===g;
   parsed.rows.forEach(row=>{const c=row.cells; const isShip=norm(c[COL.사업부])==="선박선";
-    ADJ.forEach((aj,ai)=>{ if(nkx(aj.d)!==nkx(c[COL.상세제품군])) return; const s=R.adjStat[ai];
-      if(nkx(aj.g)===nkx(c[COL.제품군])){ if(!isShip){s.other++; s.biz.add(norm(c[COL.사업부]));} }
+    ADJ.forEach((aj,ai)=>{ if(nkx(aj.d)!==nkx(c[COL.거래처])) return; const s=R.adjStat[ai];
+      if(gOK(aj,nkx(c[COL.제품군]))){ if(!isShip){s.other++; s.biz.add(norm(c[COL.사업부]));} }
       else if(isShip) s.detG.add(norm(c[COL.제품군])); });});
-  R.rows.forEach(rw=>{const c=rw.row.cells, g=nkx(c[COL.제품군]), d=nkx(c[COL.상세제품군]);
-    ADJ.forEach((aj,ai)=>{ if(nkx(aj.g)!==g||nkx(aj.d)!==d) return; const s=R.adjStat[ai];
-      if(rw.adjIdx!=null&&rw.adjIdx!==ai){ s.dup=true; return; }   // 같은 상세제품군 중복 항목: 첫 항목만 적용
+  R.rows.forEach(rw=>{const c=rw.row.cells, g=nkx(c[COL.제품군]), d=nkx(c[COL.거래처]);
+    ADJ.forEach((aj,ai)=>{ if(!gOK(aj,g)||nkx(aj.d)!==d) return; const s=R.adjStat[ai];
+      if(rw.adjIdx!=null&&rw.adjIdx!==ai){ s.dup=true; return; }   // 같은 거래처 중복 항목: 첫 항목만 적용
       s.rows++; rw.adjIdx=ai;
       rw.mon.forEach(x=>{ s.a+=x.a; s.cu+=x.pcu; s.sub+=x.subT+x.mtot;
         if(!useOvr||aj.val==null||isNaN(aj.val)||!x.a) return;
@@ -585,12 +586,12 @@ function renderWhatIf(){
 function renderAdj(){
   const ADJ=state.adj||[], R=RES; const rows=R&&R.ok?R.rows:[];
   const gs=[...new Set(rows.map(r=>norm(r.row.cells[COL.제품군])))];
-  const detOf=g=>[...new Set(rows.filter(r=>norm(r.row.cells[COL.제품군])===g).map(r=>norm(r.row.cells[COL.상세제품군])))];
+  const detOf=g=>[...new Set(rows.filter(r=>g==="(전체)"||norm(r.row.cells[COL.제품군])===g).map(r=>norm(r.row.cells[COL.거래처])))].sort();
   const pc=v=>(v*100).toFixed(2)+"%";
-  let h="<tr><th>제품군</th><th>상세제품군</th><th>방식</th><th>요율 (%)</th><th>적용 행</th><th>연간 매출액</th><th>조정 전 동재료비율</th><th>부재료비+상품재료비율</th><th>조정 전 재료비율</th><th class=\"p\">조정 후 동재료비율</th><th class=\"p\">조정 후 재료비율</th><th>동재료비 증가액</th><th></th></tr>";
+  let h="<tr><th>제품군</th><th>거래처</th><th>방식</th><th>요율 (%)</th><th>적용 행</th><th>연간 매출액</th><th>조정 전 동재료비율</th><th>부재료비+상품재료비율</th><th>조정 전 재료비율</th><th class=\"p\">조정 후 동재료비율</th><th class=\"p\">조정 후 재료비율</th><th>동재료비 증가액</th><th></th></tr>";
   ADJ.forEach((a,i)=>{const s=R&&R.adjStat?R.adjStat[i]:null;
-    const gl=[...new Set([...gs,a.g])].filter(Boolean), dl=[...new Set([...detOf(a.g),a.d])].filter(Boolean);
-    const has=(cls,x)=>(cls==="ag"?gs:detOf(a.g)).some(y=>nkx(y)===nkx(x));
+    const gl=[...new Set(["(전체)",...gs,a.g])].filter(Boolean), dl=[...new Set([...detOf(a.g),a.d])].filter(Boolean);
+    const has=(cls,x)=>(cls==="ag"&&x==="(전체)")||(cls==="ag"?gs:detOf(a.g)).some(y=>nkx(y)===nkx(x));
     const sel=(cls,list,v)=>`<select data-i="${i}" class="${cls}">${list.map(x=>`<option value="${esc(x)}"${x===v?" selected":""}>${esc(x)}${has(cls,x)?"":" (데이터 없음)"}</option>`).join("")}</select>`;
     const A=s?s.a:0, cu0=s?s.cu:0, sub=s?s.sub:0, ex=s?s.extra:0;
     h+=`<tr><td>${sel("ag",gl,a.g)}</td><td>${sel("ad",dl,a.d)}</td><td><select data-i="${i}" class="am"><option value="add"${a.mode!=="target"?" selected":""}>가산 (%p)</option><option value="target"${a.mode==="target"?" selected":""}>목표 재료비율 (%)</option></select></td>
@@ -614,13 +615,13 @@ function renderAdj(){
 function renderAdjList(){
   if(!parsed||parsed.error){$("adjList").innerHTML='<tr><td class="muted" style="border:0">영업 매출계획을 먼저 불러오세요.</td></tr>';return;}
   const m={};
-  parsed.rows.forEach(row=>{const c=row.cells, k=[norm(c[COL.사업부]),norm(c[COL.제품군]),norm(c[COL.상세제품군])].join("|");
-    const x=m[k]||(m[k]={biz:norm(c[COL.사업부]),g:norm(c[COL.제품군]),d:norm(c[COL.상세제품군]),n:0,a:0});
+  parsed.rows.forEach(row=>{const c=row.cells, k=[norm(c[COL.사업부]),norm(c[COL.제품군]),norm(c[COL.거래처])].join("|");
+    const x=m[k]||(m[k]={biz:norm(c[COL.사업부]),g:norm(c[COL.제품군]),d:norm(c[COL.거래처]),n:0,a:0});
     x.n++; for(let i=0;i<12;i++) x.a+=nz(c[M0+i*MW+OFF.매출]);});
   const toks=[...new Set((state.adj||[]).flatMap(a=>[nkx(a.d)].concat(String(a.d).toUpperCase().match(/[A-Z]+|\d+/g)||[])).filter(t=>t&&t.length>=2))];
   const like=x=>toks.some(t=>nkx(x.d).includes(t)||nkx(x.g).includes(t));
   const list=Object.values(m).sort((p,q)=>(like(q)-like(p))||p.biz.localeCompare(q.biz)||p.g.localeCompare(q.g)||p.d.localeCompare(q.d));
-  $("adjList").innerHTML="<tr><th>사업부</th><th>제품군</th><th>상세제품군</th><th>행 수</th><th>연간 매출액</th><th>계산 대상</th></tr>"+list.map((x,i)=>{
+  $("adjList").innerHTML="<tr><th>사업부</th><th>제품군</th><th>거래처</th><th>행 수</th><th>연간 매출액</th><th>계산 대상</th></tr>"+list.map((x,i)=>{
     const ship=x.biz==="선박선", hit=like(x);
     return `<tr data-i="${i}" style="${hit?"background:var(--input);font-weight:600;":""}${ship?"cursor:pointer":""}" title="${ship?"클릭하면 첫 번째 조정 항목에 적용":"선박선 외 사업부 – 계산 대상 아님"}">
       <td>${esc(x.biz)}</td><td>${esc(x.g)}</td><td>${esc(x.d)}</td><td class="n">${x.n}</td><td class="n">${fmt(x.a)}</td><td>${ship?"○":'<span style="color:var(--err)">제외</span>'}</td></tr>`;}).join("");
@@ -629,8 +630,8 @@ function renderAdjList(){
     save(); recalc(); toast(`조정 항목을 ${x.g} / ${x.d} 로 바꿨습니다`);});
 }
 $("adjAdd").onclick=()=>{const used=new Set((state.adj||[]).map(a=>nk(a.g)+"|"+nk(a.d)));
-  const cand=(RES&&RES.ok?RES.rows:[]).map(r=>[norm(r.row.cells[COL.제품군]),norm(r.row.cells[COL.상세제품군])]).find(([g,d])=>!used.has(nk(g)+"|"+nk(d)));
-  if(!cand){toast("모든 상세제품군에 이미 조정 항목이 있습니다");return;}
+  const cand=(RES&&RES.ok?RES.rows:[]).map(r=>[norm(r.row.cells[COL.제품군]),norm(r.row.cells[COL.거래처])]).find(([g,d])=>!used.has(nk(g)+"|"+nk(d)));
+  if(!cand){toast("모든 거래처에 이미 조정 항목이 있습니다");return;}
   state.adj.push({g:cand[0],d:cand[1],mode:"add",val:null});save();recalc();};
 function bindEdits(){
   $("cuTable").querySelectorAll("input").forEach(inp=>inp.onchange=()=>{const k=inp.dataset.k,i=+inp.dataset.i;const ob=state.ovr.basis;
